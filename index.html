@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polytopia Turnaj 2025</title>
+<title>Polytopia Tournament 2025</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -80,10 +80,17 @@
     line-height: 1.2;
   }
   .subtitle {
-    font-style: italic;
-    color: var(--muted);
-    margin-top: 0.5rem;
-    font-size: 1rem;
+    font-style: normal;
+    color: var(--accent);
+    margin-top: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 0.8rem 1.5rem;
+    background: rgba(201,147,58,0.08);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    display: inline-block;
+    letter-spacing: 0.05em;
   }
 
   .save-btn {
@@ -665,16 +672,15 @@
 <div class="wrapper">
 
   <header>
-    <div class="title-eyebrow">⚔ Turnaj ⚔</div>
-    <h1>Polytopia Turnaj</h1>
-    <div class="subtitle">1v1 · Drylands · Kickoo</div>
-    <button onclick="testCelebration()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: var(--accent); border: none; border-radius: 6px; color: var(--bg); cursor: pointer; font-family: 'Cinzel', serif;">🧪 Test Winner Celebration</button>
+    <div class="title-eyebrow">⚔ Tournament ⚔</div>
+    <h1>Polytopia Tournament</h1>
+    <div class="subtitle">Game Mode: 1v1 · Drylands · Kickoo</div>
   </header>
 
   <!-- Progress -->
   <div class="progress-wrap">
     <div class="progress-label">
-      <span>ODEHRÁNO ZÁPASŮ</span>
+      <span>MATCHES PLAYED</span>
       <span id="progress-text">0 / 21</span>
     </div>
     <div class="progress-bar-bg">
@@ -687,7 +693,7 @@
 
   <!-- Matrix -->
   <div class="matrix-section">
-    <div class="section-title">Výsledková matice</div>
+    <div class="section-title">Match Results</div>
     <div class="matrix-wrap">
       <table class="matrix" id="matrix-table"></table>
     </div>
@@ -695,17 +701,17 @@
 
   <!-- Rankings -->
   <div class="matrix-section" style="margin-top:2.5rem;">
-    <div class="section-title">Pořadí</div>
+    <div class="section-title">Rankings</div>
     <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       <table class="rank-table" id="rank-table">
         <thead>
           <tr>
             <th>#</th>
-            <th>Hráč</th>
-            <th>Body</th>
-            <th>Výhry</th>
-            <th>Prohry</th>
-            <th>Zbývá</th>
+            <th>Player</th>
+            <th>Points</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Remaining</th>
           </tr>
         </thead>
         <tbody id="rank-body"></tbody>
@@ -718,14 +724,14 @@
 <!-- Popup -->
 <div class="popup-overlay" id="popup">
   <div class="popup">
-    <h3>Kdo vyhrál?</h3>
+    <h3>Who won?</h3>
     <div class="matchup-label" id="popup-matchup"></div>
     <div class="winner-selector" id="winner-selector">
       <!-- Player avatars will be inserted here -->
     </div>
-    <div class="hint">Klikni na avatara vítěze</div>
+    <div class="hint">Click on the winner's avatar</div>
     <div class="popup-btns">
-      <button class="btn btn-cancel" onclick="closePopup()">Zrušit</button>
+      <button class="btn btn-cancel" onclick="closePopup()">Cancel</button>
       <button class="btn btn-clear"  onclick="clearResult()">Smazat</button>
     </div>
   </div>
@@ -734,7 +740,7 @@
 <!-- Winner Celebration -->
 <div class="celebration-overlay" id="celebration">
   <div class="celebration-content">
-    <div class="celebration-title">🏆 VÍTĚZ TURNAJE! 🏆</div>
+    <div class="celebration-title">🏆 TOURNAMENT WINNER! 🏆</div>
     <video class="winner-video" id="winner-video" autoplay loop muted style="display:none;">
       <source id="winner-video-source" src="" type="video/mp4">
     </video>
@@ -743,7 +749,7 @@
     </div>
     <div class="winner-name" id="winner-name"></div>
     <div class="winner-stats" id="winner-stats"></div>
-    <button class="celebration-close" onclick="closeCelebration()">Zavřít</button>
+    <button class="celebration-close" onclick="closeCelebration()">Close</button>
   </div>
 </div>
 
@@ -910,7 +916,7 @@ function renderMatrix() {
       } else {
         const r = getResult(i,j);
         let cls = 'empty';
-        let disp = 'přidej výsledek';
+        let disp = 'add result';
         if (r==='1:0') { cls='win'; disp='1:0'; }
         else if (r==='0:1') { cls='loss'; disp='0:1'; }
         html += `<td class="result-cell ${cls}" onclick="openPopup(${i},${j})" title="${PLAYERS[i].name} vs ${PLAYERS[j].name}"><span class="result-display">${disp}</span></td>`;
@@ -931,7 +937,7 @@ function renderScoreboard() {
     html += `<div class="score-card ${leader}">
       ${avatarEl(s.idx,80)}
       <div class="sc-name">${PLAYERS[s.idx].name}</div>
-      <div class="sc-pts">${s.pts} <span>BODŮ</span></div>
+      <div class="sc-pts">${s.pts} <span>POINTS</span></div>
       <div class="sc-record">${s.wins}V – ${s.losses}P</div>
     </div>`;
   });
@@ -1019,7 +1025,7 @@ function confirmResult(winner) {
   if (!winner) {
     const selected = document.querySelector('.winner-option.selected');
     if (!selected) {
-      showToast('⚠ Vyber vítěze');
+      showToast('⚠ Select winner');
       return;
     }
     winner = selected.getAttribute('data-winner');
@@ -1031,8 +1037,8 @@ function confirmResult(winner) {
   closePopup();
   render();
   showToast(result === '1:0'
-    ? `✓ Výhra: ${PLAYERS[activeCell?.r]?.name ?? ''}`
-    : `✓ Výhra: ${PLAYERS[activeCell?.c]?.name ?? ''}`);
+    ? `✓ Winner: ${PLAYERS[activeCell?.r]?.name ?? ''}`
+    : `✓ Winner: ${PLAYERS[activeCell?.c]?.name ?? ''}`);
 
   // Check if tournament is complete
   checkTournamentComplete();
@@ -1044,7 +1050,7 @@ function clearResult() {
   autoSave();
   closePopup();
   render();
-  showToast('Výsledek smazán');
+  showToast('Result deleted');
 }
 
 // Enter key
@@ -1093,7 +1099,7 @@ function showCelebration(winner) {
   // Set winner info
   document.getElementById('winner-name').textContent = player.name;
   document.getElementById('winner-stats').textContent =
-    `${winner.wins} výher | ${winner.losses} proher | ${winner.pts} bodů`;
+    `${winner.wins} wins | ${winner.losses} losses | ${winner.pts} points`;
 
   // Try to load winner's video
   const videoPath = `resources/video/${player.name}.mp4`;
@@ -1143,17 +1149,6 @@ function closeCelebration() {
   document.querySelectorAll('.confetti').forEach(c => c.remove());
 }
 
-function testCelebration() {
-  // Simulate MorPet87 winning
-  const testWinner = {
-    idx: 0,  // MorPet87 is first player
-    wins: 8,
-    losses: 0,
-    pts: 8
-  };
-  showCelebration(testWinner);
-}
-
 function createConfetti() {
   const overlay = document.getElementById('celebration');
   const colors = ['#e8c06a', '#c9933a', '#7be89a', '#e87b7b', '#6b7094'];
@@ -1180,7 +1175,7 @@ function save() {
   a.download = 'results.json';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('💾 Soubor results.json stažen!');
+  showToast('💾 File results.json downloaded!');
 }
 
 async function load() {
