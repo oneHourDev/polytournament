@@ -1,0 +1,29 @@
+{
+  "tournaments": [
+    {
+      "id": 1,
+      "slug": "fight-1",
+      "name": "Fight 1",
+      "creationDate": "2026-05-13",
+      "settings": {
+        "selectedTribe": "Kickoo",
+        "mapType": "Drylands",
+        "mapSize": "Normal",
+        "gameMode": "1v1",
+        "bots": [],
+        "specialRules": ""
+      },
+      "players": [
+        { "name": "Player 1" },
+        { "name": "Player 2" },
+        { "name": "Player 3" },
+        { "name": "Player 4" },
+        { "name": "Player 5" },
+        { "name": "Player 6" },
+        { "name": "Player 7" }
+      ],
+      "scoreResults": {},
+      "results": []
+    }
+  ]
+}

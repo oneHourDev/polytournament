@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fight 1 - Polytournament</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="wrapper">
+  <nav class="detail-nav">
+    <a class="small-btn" href="../">Back to Hub</a>
+    <span class="settings-pill">Static page</span>
+  </nav>
+
+  <header>
+    <div class="title-eyebrow" id="title-eyebrow">fight</div>
+    <h1 id="tournament-title">Tournament</h1>
+    <div class="subtitle" id="tournament-subtitle"></div>
+    <div class="settings-summary" id="settings-summary"></div>
+  </header>
+
+  <div class="notice-box" id="special-rules-wrap" hidden>
+    <strong>Special rules:</strong> <span id="special-rules"></span>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>Matches Played</span>
+      <span id="progress-text">0 / 0</span>
+    </div>
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="scoreboard" id="scoreboard"></div>
+
+  <section class="matrix-section">
+    <div class="section-title">Score Matrix</div>
+    <div class="matrix-wrap">
+      <table class="matrix" id="matrix-table"></table>
+    </div>
+  </section>
+
+  <section class="matrix-section">
+    <div class="section-title">Rankings</div>
+    <div class="table-panel">
+      <table class="rank-table" id="rank-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th>Points</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Left</th>
+          </tr>
+        </thead>
+        <tbody id="rank-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="matrix-section">
+    <div class="section-title">Results</div>
+    <div class="table-panel">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Fight Number</th>
+            <th>Winner</th>
+            <th>Tribe</th>
+            <th>Notes / Comments</th>
+          </tr>
+        </thead>
+        <tbody id="manual-results-body"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="modal-overlay" id="popup">
+  <div class="modal narrow">
+    <h3>Who won?</h3>
+    <div class="matchup-label" id="popup-matchup"></div>
+    <div class="winner-selector" id="winner-selector"></div>
+    <div class="hint">Click the winner avatar</div>
+    <div class="popup-btns">
+      <button class="btn btn-cancel" id="popup-cancel" type="button">Cancel</button>
+      <button class="btn btn-clear" id="popup-clear" type="button">Clear</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+window.TOURNAMENT_DATA = {
+  "id": 1,
+  "slug": "fight-1",
+  "name": "Fight 1",
+  "creationDate": "2026-05-13",
+  "settings": {
+    "selectedTribe": "Kickoo",
+    "mapType": "Drylands",
+    "mapSize": "Normal",
+    "gameMode": "1v1",
+    "bots": [],
+    "specialRules": ""
+  },
+  "players": [
+    {
+      "name": "Player 1"
+    },
+    {
+      "name": "Player 2"
+    },
+    {
+      "name": "Player 3"
+    },
+    {
+      "name": "Player 4"
+    },
+    {
+      "name": "Player 5"
+    },
+    {
+      "name": "Player 6"
+    },
+    {
+      "name": "Player 7"
+    }
+  ],
+  "scoreResults": {},
+  "results": []
+};
+</script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="../assets/tournament.js"></script>
+</body>
+</html>
