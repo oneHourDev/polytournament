@@ -20,14 +20,14 @@
   <header>
     <div class="title-eyebrow">⚔ Tournament 2 ⚔</div>
     <h1>Polytopia Tournament 2</h1>
-    <div class="subtitle">Game Mode: 1v1 · Drylands · Kickoo</div>
+    <div class="subtitle">Game Mode: Cymanti · 1v1 · Small (196 tiles) · Continents</div>
   </header>
 
   <!-- Progress -->
   <div class="progress-wrap">
     <div class="progress-label">
       <span>MATCHES PLAYED</span>
-      <span id="progress-text">0 / 36</span>
+      <span id="progress-text">0 / 45</span>
     </div>
     <div class="progress-bar-bg">
       <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
@@ -114,13 +114,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOURNAMENT_CONFIG = {
-  id: 'tournament2',
+  id: 'tournament2/results',  // Use original Firebase path for backward compatibility
 
   // Tournament Settings
   title: 'Polytopia Tournament 2',
-  subtitle: 'Game Mode: 1v1 · Drylands · Kickoo',
+  subtitle: 'Game Mode: Cymanti · 1v1 · Small (196 tiles) · Continents',
 
-  // Players List
+  // Players List (10 players)
   players: [
     { name: "MorPet87", avatar: "resources/img/MorPet87.jpeg" },
     { name: "WestieWarrior", avatar: "resources/img/WestieWarrior.jpeg" },
@@ -130,7 +130,8 @@ const TOURNAMENT_CONFIG = {
     { name: "JunkervonSturm", avatar: "resources/img/JunkervonSturm.jpeg" },
     { name: "Taodjinud", avatar: "resources/img/Taodjinud.jpeg" },
     { name: "OpenTheFckingStrait", avatar: "resources/img/OpenTheFckingStrait.jpeg" },
-    { name: "JamesMoriarty8", avatar: "resources/img/JamesMoriarty8.jpeg" }
+    { name: "JamesMoriarty8", avatar: "resources/img/JamesMoriarty8.jpeg" },
+    { name: "thoryr", avatar: "resources/img/thoryr.jpeg" }
   ],
 
   // Firebase Configuration

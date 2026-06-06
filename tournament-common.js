@@ -12,9 +12,12 @@ let toastTimer;
 function initFirebase(firebaseConfig, tournamentId) {
   if (typeof firebase !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
     try {
-      firebase.initializeApp(firebaseConfig);
+      // Check if Firebase app already exists, otherwise initialize
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
       database = firebase.database();
-      resultsRef = database.ref(`results/${tournamentId}`);
+      resultsRef = database.ref(tournamentId);
 
       // Listen for real-time updates
       resultsRef.on('value', (snapshot) => {
