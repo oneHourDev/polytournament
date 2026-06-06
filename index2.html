@@ -67,38 +67,7 @@
 
 </div>
 
-<!-- Popup -->
-<div class="popup-overlay" id="popup">
-  <div class="popup">
-    <h3>Who won?</h3>
-    <div class="matchup-label" id="popup-matchup"></div>
-    <div class="winner-selector" id="winner-selector"></div>
-    <div class="hint">Click on the winner's avatar</div>
-    <div class="popup-btns">
-      <button class="btn btn-cancel" onclick="closePopup()">Cancel</button>
-      <button class="btn btn-clear" onclick="clearResult()">Smazat</button>
-    </div>
-  </div>
-</div>
-
-<!-- Winner Celebration -->
-<div class="celebration-overlay" id="celebration">
-  <div class="celebration-content">
-    <div class="celebration-title">🏆 TOURNAMENT WINNER! 🏆</div>
-    <video class="winner-video" id="winner-video" autoplay loop muted style="display:none;">
-      <source id="winner-video-source" src="" type="video/mp4">
-    </video>
-    <div class="winner-avatar-container" id="winner-avatar-container" style="display:none;">
-      <img class="winner-avatar" id="winner-avatar" src="" alt="Winner">
-    </div>
-    <div class="winner-name" id="winner-name"></div>
-    <div class="winner-stats" id="winner-stats"></div>
-    <button class="celebration-close" onclick="closeCelebration()">Close</button>
-  </div>
-</div>
-
-<!-- Toast -->
-<div class="toast" id="toast"></div>
+<!-- Shared UI components (popup, celebration, toast) are injected by tournament-common.js -->
 
 <!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
