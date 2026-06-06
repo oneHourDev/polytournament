@@ -148,6 +148,9 @@
     right: 6px;
     font-size: 0.85rem;
   }
+  .score-card.leader.tied::before {
+    content: '🤝';
+  }
   .sc-avatar {
     width: 80px;
     height: 80px;
@@ -897,6 +900,84 @@ function calcStats() {
   });
 }
 
+// ─── HEAD-TO-HEAD TIEBREAKER ───────────────────────────────────────────────
+// Returns -1 if player a beat player b, 1 if b beat a, 0 if no result or draw
+function headToHead(aIdx, bIdx) {
+  const result = getResult(aIdx, bIdx);
+  if (result === "1:0") return -1; // a beat b, a should rank higher
+  if (result === "0:1") return 1;  // b beat a, b should rank higher
+  return 0; // no result yet
+}
+
+// Check if a player beat all others in a group
+function beatAllInGroup(playerIdx, group) {
+  return group.every(other => {
+    if (other.idx === playerIdx) return true; // skip self
+    const result = getResult(playerIdx, other.idx);
+    return result === "1:0"; // must have beaten this player
+  });
+}
+
+// Smart sort with multi-way head-to-head tiebreaker
+function sortByRank(stats) {
+  // First, group by points
+  const grouped = {};
+  stats.forEach(s => {
+    if (!grouped[s.pts]) grouped[s.pts] = [];
+    grouped[s.pts].push(s);
+  });
+
+  // Process each group
+  const result = [];
+  Object.keys(grouped)
+    .map(Number)
+    .sort((a, b) => b - a) // sort point groups descending
+    .forEach(pts => {
+      const group = grouped[pts];
+
+      if (group.length === 1) {
+        // No tie, just add
+        group[0].isTied = false;
+        result.push(group[0]);
+      } else if (group.length === 2) {
+        // 2-way tie: simple head-to-head
+        const h2h = headToHead(group[0].idx, group[1].idx);
+        if (h2h < 0) {
+          group[0].isTied = false;
+          group[1].isTied = false;
+          result.push(group[0], group[1]);
+        } else if (h2h > 0) {
+          group[0].isTied = false;
+          group[1].isTied = false;
+          result.push(group[1], group[0]);
+        } else {
+          // No result yet, mark as tied
+          group[0].isTied = true;
+          group[1].isTied = true;
+          result.push(...group);
+        }
+      } else {
+        // Multi-way tie (3+ players)
+        // Check if any player beat ALL others in the group
+        const winners = group.filter(p => beatAllInGroup(p.idx, group));
+
+        if (winners.length === 1) {
+          // One clear winner of the tied group
+          winners[0].isTied = false;
+          const rest = group.filter(p => p.idx !== winners[0].idx);
+          rest.forEach(p => p.isTied = true);
+          result.push(winners[0], ...rest.sort((a,b) => b.wins - a.wins || a.losses - b.losses));
+        } else {
+          // No one beat everyone - it's a general tie
+          group.forEach(p => p.isTied = true);
+          result.push(...group.sort((a,b) => b.wins - a.wins || a.losses - b.losses));
+        }
+      }
+    });
+
+  return result;
+}
+
 // ─── RENDER ────────────────────────────────────────────────────────────────
 function render() {
   renderMatrix();
@@ -933,12 +1014,15 @@ function renderMatrix() {
 }
 
 function renderScoreboard() {
-  const stats = calcStats().sort((a,b)=>b.pts-a.pts||b.wins-a.wins);
+  const stats = sortByRank(calcStats());
   const maxPts = stats[0]?.pts ?? 0;
   let html = '';
-  stats.forEach(s => {
-    const leader = s.pts === maxPts && s.pts > 0 ? 'leader' : '';
-    html += `<div class="score-card ${leader}">
+  stats.forEach((s, idx) => {
+    const isLeader = s.pts === maxPts && s.pts > 0;
+    const leader = isLeader ? 'leader' : '';
+    const tied = s.isTied ? 'tied' : '';
+
+    html += `<div class="score-card ${leader} ${tied}">
       ${avatarEl(s.idx,80)}
       <div class="sc-name">${PLAYERS[s.idx].name}</div>
       <div class="sc-pts">${s.pts} <span>POINTS</span></div>
@@ -949,12 +1033,26 @@ function renderScoreboard() {
 }
 
 function renderRankings() {
-  const stats = calcStats().sort((a,b)=>b.pts-a.pts||b.wins-a.wins||a.losses-b.losses);
+  const stats = sortByRank(calcStats());
   let html = '';
-  stats.forEach((s,rank) => {
+  let displayRank = 1;
+  let tieGroupStart = null;
+
+  stats.forEach((s, idx) => {
+    // Check if this is start of a tie group
+    if (idx > 0 && s.pts === stats[idx-1].pts && s.isTied && stats[idx-1].isTied) {
+      if (tieGroupStart === null) tieGroupStart = displayRank;
+    } else {
+      tieGroupStart = null;
+      displayRank = idx + 1;
+    }
+
+    const rankDisplay = tieGroupStart !== null ? `T${tieGroupStart}` : `${displayRank}`;
+    const tieIcon = s.isTied && idx === 0 ? ' 🤝' : '';
+
     html += `<tr>
-      <td class="rank-no">${rank+1}.</td>
-      <td><div class="rank-name">${avatarEl(s.idx,42)} ${PLAYERS[s.idx].name}</div></td>
+      <td class="rank-no">${rankDisplay}.</td>
+      <td><div class="rank-name">${avatarEl(s.idx,42)} ${PLAYERS[s.idx].name}${tieIcon}</div></td>
       <td class="pts">${s.pts}</td>
       <td class="wins">${s.wins}</td>
       <td class="losses">${s.losses}</td>
