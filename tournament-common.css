@@ -604,6 +604,7 @@ td.loss .result-display { color: #e87b7b; }
   justify-content: center;
   align-items: center;
   animation: fadeIn 0.5s ease;
+  cursor: pointer;
 }
 .celebration-overlay.active {
   display: flex;
@@ -614,8 +615,9 @@ td.loss .result-display { color: #e87b7b; }
   z-index: 2;
   max-width: 90vw;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 1rem;
+  pointer-events: none;
 }
 .celebration-title {
   font-family: 'Cinzel Decorative', serif;
@@ -671,6 +673,7 @@ td.loss .result-display { color: #e87b7b; }
   color: var(--gold);
   cursor: pointer;
   transition: all 0.3s ease;
+  pointer-events: auto;
 }
 .celebration-close:hover {
   background: var(--accent);

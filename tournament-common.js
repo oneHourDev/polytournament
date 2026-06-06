@@ -479,6 +479,14 @@ function injectSharedTemplates() {
   `;
 
   document.body.insertAdjacentHTML('beforeend', template);
+
+  // Add click-to-close for celebration overlay
+  setTimeout(() => {
+    const celebrationOverlay = document.getElementById('celebration');
+    if (celebrationOverlay) {
+      celebrationOverlay.addEventListener('click', closeCelebration);
+    }
+  }, 0);
 }
 
 // ─── INITIALIZATION ────────────────────────────────────────────────────────
