@@ -375,6 +375,9 @@ td.loss .result-display { color: #e87b7b; }
   border-radius: 12px;
   padding: 1.8rem 2rem;
   min-width: 320px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 0 60px rgba(201,147,58,0.25);
   position: relative;
 }
@@ -415,9 +418,10 @@ td.loss .result-display { color: #e87b7b; }
 
 .winner-selector {
   display: flex;
-  gap: 2rem;
+  gap: 1rem;
   justify-content: center;
   margin: 1.5rem 0;
+  flex-wrap: wrap;
 }
 
 .winner-option {
@@ -425,12 +429,13 @@ td.loss .result-display { color: #e87b7b; }
   flex-direction: column;
   align-items: center;
   cursor: pointer;
-  padding: 1rem;
+  padding: 0.8rem;
   border-radius: 12px;
   border: 2px solid var(--border);
   background: var(--bg);
   transition: all 0.3s ease;
-  min-width: 120px;
+  min-width: 100px;
+  flex: 0 1 auto;
 }
 
 .winner-option:hover {
@@ -446,11 +451,11 @@ td.loss .result-display { color: #e87b7b; }
 }
 
 .winner-option .avatar {
-  width: 80px;
-  height: 80px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   border: 2px solid var(--border);
-  margin-bottom: 0.8rem;
+  margin-bottom: 0.5rem;
   object-fit: cover;
   background: var(--draw);
 }
@@ -461,9 +466,11 @@ td.loss .result-display { color: #e87b7b; }
 
 .winner-option .player-name {
   font-family: 'Cinzel', serif;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--gold);
   text-align: center;
+  word-break: break-word;
+  max-width: 100px;
 }
 
 .popup-btns {
@@ -605,6 +612,10 @@ td.loss .result-display { color: #e87b7b; }
   text-align: center;
   position: relative;
   z-index: 2;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1rem;
 }
 .celebration-title {
   font-family: 'Cinzel Decorative', serif;
@@ -620,8 +631,8 @@ td.loss .result-display { color: #e87b7b; }
   margin: 2rem 0;
 }
 .winner-avatar {
-  width: 200px;
-  height: 200px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   border: 4px solid var(--gold);
   object-fit: cover;
@@ -631,6 +642,7 @@ td.loss .result-display { color: #e87b7b; }
 .winner-video {
   width: 100%;
   max-width: 600px;
+  max-height: 50vh;
   border-radius: 12px;
   border: 4px solid var(--gold);
   box-shadow: 0 0 60px rgba(232,192,106,0.6), 0 0 120px rgba(232,192,106,0.3);
