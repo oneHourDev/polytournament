@@ -21,6 +21,7 @@ Open `index3.html` and modify **only** the configuration section at the bottom:
 ```javascript
 const TOURNAMENT_CONFIG = {
   id: 'tournament3',  // ← Change this (must be unique!)
+                      // NOTE: Tournament 1 uses 'results' for backward compatibility
 
   // Tournament Settings
   title: 'Polytopia Tournament 3',  // ← Change the title
