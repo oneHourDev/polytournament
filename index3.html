@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polytopia Tournament 1</title>
+<title>Polytopia Tournament 3</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tournament-common.css">
 </head>
@@ -11,17 +11,17 @@
 
 <!-- Tournament Navigation -->
 <div class="tournament-nav">
-  <a href="index.html" class="active">Tournament 1</a>
+  <a href="index.html">Tournament 1</a>
   <a href="index2.html">Tournament 2</a>
-  <a href="index3.html">Tournament 3</a>
+  <a href="index3.html" class="active">Tournament 3</a>
 </div>
 
 <div class="wrapper">
 
   <header>
     <div class="title-eyebrow">⚔ Tournament ⚔</div>
-    <h1>Polytopia Tournament</h1>
-    <div class="subtitle">Game Mode: 1v1 · Drylands · Kickoo</div>
+    <h1>Glory 15k Tournament</h1>
+    <div class="subtitle">Style: Glory 15k · Map: Lakes · Size: Normal (256 tiles) · Nation: Elyrion · Bots: 2 Crazy</div>
   </header>
 
   <!-- Progress -->
@@ -77,18 +77,18 @@
 <!-- Common Tournament Logic -->
 <script src="tournament-common.js"></script>
 
-<!-- Tournament 1 Configuration -->
+<!-- Tournament 3 Configuration -->
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// TOURNAMENT 1 CONFIGURATION
+// TOURNAMENT 3 CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOURNAMENT_CONFIG = {
-  id: 'results',  // Use 'results' for backward compatibility with existing Firebase data
+  id: 'tournament3',  // Unique ID for Tournament 3
 
   // Tournament Settings
-  title: 'Polytopia Tournament',
-  subtitle: 'Game Mode: 1v1 · Drylands · Kickoo',
+  title: 'Glory 15k Tournament',
+  subtitle: 'Style: Glory 15k · Map: Lakes · Size: Normal (256 tiles) · Nation: Elyrion · Bots: 2 Crazy',
 
   // Players List
   players: [
