@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polytopia Tournament 3</title>
+<title>Polytopia Tournament 4</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tournament-common.css">
 </head>
@@ -13,23 +13,23 @@
 <div class="tournament-nav">
   <a href="index.html">Tournament 1</a>
   <a href="index2.html">Tournament 2</a>
-  <a href="index3.html" class="active">Tournament 3</a>
-  <a href="index4.html">Tournament 4</a>
+  <a href="index3.html">Tournament 3</a>
+  <a href="index4.html" class="active">Tournament 4</a>
 </div>
 
 <div class="wrapper">
 
   <header>
     <div class="title-eyebrow">⚔ Tournament ⚔</div>
-    <h1>Glory 15k Tournament</h1>
-    <div class="subtitle">Style: Glory 15k · Map: Lakes · Size: Normal (256 tiles) · Nation: Elyrion · Bots: 2 Crazy</div>
+    <h1>Tournament 4</h1>
+    <div class="subtitle">Map: Drylands · Size: Normal (196 tiles) · Nation: Ai-Mo · Bots: 14 Crazy</div>
   </header>
 
   <!-- Progress -->
   <div class="progress-wrap">
     <div class="progress-label">
       <span>MATCHES PLAYED</span>
-      <span id="progress-text">0 / 45</span>
+      <span id="progress-text">0 / 21</span>
     </div>
     <div class="progress-bar-bg">
       <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
@@ -78,29 +78,28 @@
 <!-- Common Tournament Logic -->
 <script src="tournament-common.js"></script>
 
-<!-- Tournament 3 Configuration -->
+<!-- Tournament 4 Configuration -->
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// TOURNAMENT 3 CONFIGURATION
+// TOURNAMENT 4 CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOURNAMENT_CONFIG = {
-  id: 'tournament3',  // Unique ID for Tournament 3
+  id: 'tournament4',  // Unique ID for Tournament 4
 
   // Tournament Settings
-  title: 'Glory 15k Tournament',
-  subtitle: 'Style: Glory 15k · Map: Lakes · Size: Normal (256 tiles) · Nation: Elyrion · Bots: 2 Crazy',
+  title: 'Tournament 4',
+  subtitle: 'Map: Drylands · Size: Normal (196 tiles) · Nation: Ai-Mo · Bots: 14 Crazy',
 
-  // Players List (10 players)
+  // Players List (7 players)
   players: [
-    { name: "MorPet87", avatar: "resources/img/MorPet87.jpeg" },
-    { name: "WestieWarrior", avatar: "resources/img/WestieWarrior.jpeg" },
     { name: "OneHourPlayer", avatar: "resources/img/OneHourPlayer.jpeg" },
+    { name: "WestieWarrior", avatar: "resources/img/WestieWarrior.jpeg" },
+    { name: "MorPet87", avatar: "resources/img/MorPet87.jpeg" },
+    { name: "thoryr", avatar: "resources/img/thoryr.jpeg" },
     { name: "Hukul", avatar: "resources/img/Hukul.jpeg" },
-    { name: "ContrivedFort9", avatar: "resources/img/ContrivedFort9.jpeg" },
     { name: "JunkervonSturm", avatar: "resources/img/JunkervonSturm.jpeg" },
-    { name: "Taodjinud", avatar: "resources/img/Taodjinud.jpeg" },
-    { name: "thoryr", avatar: "resources/img/thoryr.jpeg" }
+    { name: "Taodjinud", avatar: "resources/img/Taodjinud.jpeg" }
   ],
 
   // Firebase Configuration
