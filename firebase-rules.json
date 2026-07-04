@@ -8,6 +8,8 @@
     "tournament3": { ".read": true, ".write": true },
     "tournament4": { ".read": true, ".write": true },
 
-    "tournaments": { ".read": true, ".write": true }
+    "tournaments": { ".read": true, ".write": true },
+
+    "latest_tournament": { ".read": true, ".write": true }
   }
 }

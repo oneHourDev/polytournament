@@ -67,6 +67,46 @@ function autoSave() {
   }
 }
 
+// ─── SCORE DOCS (feed the WhatsApp announcement Cloud Function) ──────────────
+// Alongside the positional `results` map (used for ranking), we write a richer
+// per-match "score doc" under tournaments/<id>/scores/<matchId>. It carries an
+// explicit winner_nickname and a `notified` flag; the onScoreCreate Cloud
+// Function reads winner_nickname (never recomputes it) and announces once.
+// Scores are Firebase-only (no localStorage fallback — no bot when offline).
+function scoresBasePath() {
+  if (!currentResultsPath) return null;
+  return currentResultsPath.replace(/\/results$/, '');
+}
+
+function saveScore(r, c, winner) {
+  if (!database) return;
+  const base = scoresBasePath();
+  if (!base) return;
+  const a = Math.min(r, c), b = Math.max(r, c);
+  const matchId = `${a}-${b}`;
+  const winnerIdx = winner === 'r' ? r : c;
+  const loserIdx = winner === 'r' ? c : r;
+  const score = {
+    result: winnerIdx === a ? '1:0' : '0:1',   // canonical: row(a) vs col(b)
+    winner_nickname: PLAYERS[winnerIdx].name,
+    loser_nickname: PLAYERS[loserIdx].name,
+    row_nickname: PLAYERS[a].name,
+    col_nickname: PLAYERS[b].name,
+    match_id: matchId,
+    notified: false,
+    created_at: Date.now(),
+  };
+  database.ref(`${base}/scores/${matchId}`).set(score).catch(e => console.error('Score save failed:', e));
+}
+
+function deleteScore(r, c) {
+  if (!database) return;
+  const base = scoresBasePath();
+  if (!base) return;
+  const a = Math.min(r, c), b = Math.max(r, c);
+  database.ref(`${base}/scores/${a}-${b}`).remove().catch(e => console.error('Score delete failed:', e));
+}
+
 function loadFromStorage() {
   const stored = localStorage.getItem(`polytournament-results-${TOURNAMENT_ID}`);
   if (stored) {
@@ -254,11 +294,13 @@ function renderScoreboard() {
       displayRank = idx + 1;
     }
     const position = tieGroupStart !== null ? `T${tieGroupStart}` : `${displayRank}`;
+    const signedIn = (window.PARTICIPANTS instanceof Set) && window.PARTICIPANTS.has(normalizeNick(PLAYERS[s.idx].name));
+    const badge = signedIn ? ' <span class="signed-in" title="Signed in via WhatsApp">✓</span>' : '';
 
     html += `<div class="score-card ${leader} ${tied}">
       <div class="sc-position">#${position}</div>
       ${avatarEl(s.idx, 80)}
-      <div class="sc-name">${PLAYERS[s.idx].name}</div>
+      <div class="sc-name">${PLAYERS[s.idx].name}${badge}</div>
       <div class="sc-pts">${s.pts} <span>POINTS</span></div>
       <div class="sc-record">${s.wins}V – ${s.losses}P</div>
     </div>`;
@@ -331,6 +373,7 @@ function confirmResult(winner) {
   const result = winner === 'r' ? '1:0' : '0:1';
   setResult(activeCell.r, activeCell.c, result);
   autoSave();
+  saveScore(activeCell.r, activeCell.c, winner);
   closePopup();
   render();
   showToast(result === '1:0'
@@ -344,6 +387,7 @@ function clearResult() {
   if (!activeCell) return;
   clearResultAt(activeCell.r, activeCell.c);
   autoSave();
+  deleteScore(activeCell.r, activeCell.c);
   closePopup();
   render();
   showToast('Result deleted');
@@ -527,6 +571,25 @@ function setPlayers(players) {
 }
 
 // ─── DYNAMIC HUB (Tournament 2.0) ──────────────────────────────────────────
+
+// Case-insensitive, whitespace-trimmed nickname key (mirrors functions/lib/core).
+function normalizeNick(s) {
+  return String(s == null ? '' : s).trim().toLowerCase();
+}
+
+// Registry caching: keep the last good registry in localStorage so the hub can
+// still render tournaments if a later Firebase read fails (offline / rules).
+const REGISTRY_CACHE_KEY = 'polytournament-registry';
+function cacheRegistry(reg) {
+  try { localStorage.setItem(REGISTRY_CACHE_KEY, JSON.stringify(reg)); } catch (e) { /* storage unavailable */ }
+}
+function loadCachedRegistry() {
+  try {
+    const s = localStorage.getItem(REGISTRY_CACHE_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch (e) { return null; }
+}
+
 // Build the "Style: Glory 15k · Map: … · Bots: 14 Crazy" subtitle from a
 // structured setup object stored in Firebase.
 function buildSubtitle(setup, override) {
@@ -564,12 +627,15 @@ function currentHashTid() {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-// Resolve which dynamic tournament to show: the hash selection if valid,
-// otherwise the newest (highest-order) dynamic tournament.
+// Resolve which dynamic tournament to show: the hash selection if valid, then
+// the `latest_tournament` pointer if valid, otherwise the newest (highest-order)
+// dynamic tournament. The pointer read may fail (rules) — the fallback covers it.
 function resolveActiveTid(list) {
   const dynamic = list.filter(t => !t.legacy);
   const hashed = currentHashTid();
   if (hashed && dynamic.some(t => t.id === hashed)) return hashed;
+  const latest = window.LATEST_TID;
+  if (latest && dynamic.some(t => t.id === latest)) return latest;
   return dynamic.length ? dynamic[dynamic.length - 1].id : null;
 }
 
@@ -609,6 +675,13 @@ function loadDynamicTournament(entry) {
   if (sub) sub.textContent = buildSubtitle(entry.setup, entry.subtitle);
 
   setPlayers(entry.players || []);
+  // Participants (who has signed in via the WhatsApp bot) live under the same
+  // registry entry, so they arrive with the tournaments read — no extra listener.
+  window.PARTICIPANTS = new Set(
+    Object.values(entry.participants || {})
+      .map(p => normalizeNick(p && p.nickname))
+      .filter(Boolean)
+  );
   // Match results live INSIDE the registry entry, so creating a tournament is
   // just adding a child under "tournaments" — no separate node or rule per
   // tournament. (Legacy pages still use their own top-level nodes.)
@@ -647,11 +720,30 @@ function initHub(firebaseConfig) {
 
   database.ref('tournaments').on('value', (snapshot) => {
     window.REGISTRY = snapshot.val() || {};
+    cacheRegistry(window.REGISTRY);
     route();
   }, (err) => {
     console.error('Failed to read tournaments registry:', err);
-    setHubState(false, 'Could not read the tournament list (check Firebase rules for the "tournaments" node).');
+    // Explicit fallback: serve the last successfully-loaded registry if we have
+    // one cached, otherwise show the guidance message.
+    const cached = loadCachedRegistry();
+    if (cached) {
+      window.REGISTRY = cached;
+      route();
+      if (typeof showToast === 'function') showToast('⚠ Offline — showing cached tournaments');
+    } else {
+      setHubState(false, 'Could not read the tournament list (check Firebase rules for the "tournaments" node).');
+    }
   });
+
+  // The latest_tournament pointer is a nicety for choosing the default view.
+  // It lives at the top level and may be unreadable under strict rules — if so,
+  // we simply fall back to newest-by-order (see resolveActiveTid).
+  database.ref('latest_tournament').on('value', (snap) => {
+    const v = snap.val();
+    window.LATEST_TID = (typeof v === 'string') ? v : null;
+    route();
+  }, () => { /* ignore: pointer is optional */ });
 
   window.addEventListener('hashchange', route);
 }
