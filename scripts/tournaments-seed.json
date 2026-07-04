@@ -1,0 +1,30 @@
+{
+  "t1": { "order": 1, "title": "Tournament 1", "legacy": true, "href": "index1.html" },
+  "t2": { "order": 2, "title": "Tournament 2", "legacy": true, "href": "index2.html" },
+  "t3": { "order": 3, "title": "Tournament 3", "legacy": true, "href": "index3.html" },
+  "t4": { "order": 4, "title": "Tournament 4", "legacy": true, "href": "index4.html" },
+  "t5": {
+    "order": 5,
+    "title": "Tournament 5",
+    "legacy": false,
+    "setup": {
+      "mapType": "Lakes",
+      "mapSize": "Normal (196 tiles)",
+      "botCount": 10,
+      "botDifficulty": "Crazy",
+      "nation": "Bardur",
+      "style": "glory",
+      "gloryTier": "20k"
+    },
+    "players": [
+      "OneHourPlayer",
+      "WestieWarrior",
+      "MorPet87",
+      "Hukul",
+      "JunkervonSturm",
+      "Taodjinud",
+      "OpenTheFckingStrait",
+      "thoryr"
+    ]
+  }
+}

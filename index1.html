@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polytopia Tournament 2</title>
+<title>Polytopia Tournament 1</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cinzel:wght@400;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="tournament-common.css">
 </head>
@@ -12,8 +12,8 @@
 <!-- Tournament Navigation -->
 <div class="tournament-nav">
   <a href="index.html">🏆 All</a>
-  <a href="index1.html">Tournament 1</a>
-  <a href="index2.html" class="active">Tournament 2</a>
+  <a href="index1.html" class="active">Tournament 1</a>
+  <a href="index2.html">Tournament 2</a>
   <a href="index3.html">Tournament 3</a>
   <a href="index4.html">Tournament 4</a>
 </div>
@@ -21,16 +21,16 @@
 <div class="wrapper">
 
   <header>
-    <div class="title-eyebrow">⚔ Tournament 2 ⚔</div>
-    <h1>Polytopia Tournament 2</h1>
-    <div class="subtitle">Game Mode: Cymanti · 1v1 · Small (196 tiles) · Continents</div>
+    <div class="title-eyebrow">⚔ Tournament ⚔</div>
+    <h1>Polytopia Tournament</h1>
+    <div class="subtitle">Game Mode: 1v1 · Drylands · Kickoo</div>
   </header>
 
   <!-- Progress -->
   <div class="progress-wrap">
     <div class="progress-label">
       <span>MATCHES PLAYED</span>
-      <span id="progress-text">0 / 45</span>
+      <span id="progress-text">0 / 36</span>
     </div>
     <div class="progress-bar-bg">
       <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
@@ -79,20 +79,20 @@
 <!-- Common Tournament Logic -->
 <script src="tournament-common.js"></script>
 
-<!-- Tournament 2 Configuration -->
+<!-- Tournament 1 Configuration -->
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// TOURNAMENT 2 CONFIGURATION
+// TOURNAMENT 1 CONFIGURATION
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TOURNAMENT_CONFIG = {
-  id: 'tournament2/results',  // Use original Firebase path for backward compatibility
+  id: 'results',  // Use 'results' for backward compatibility with existing Firebase data
 
   // Tournament Settings
-  title: 'Polytopia Tournament 2',
-  subtitle: 'Game Mode: Cymanti · 1v1 · Small (196 tiles) · Continents',
+  title: 'Polytopia Tournament',
+  subtitle: 'Game Mode: 1v1 · Drylands · Kickoo',
 
-  // Players List (10 players)
+  // Players List
   players: [
     { name: "MorPet87", avatar: "resources/img/MorPet87.jpeg" },
     { name: "WestieWarrior", avatar: "resources/img/WestieWarrior.jpeg" },
@@ -102,8 +102,7 @@ const TOURNAMENT_CONFIG = {
     { name: "JunkervonSturm", avatar: "resources/img/JunkervonSturm.jpeg" },
     { name: "Taodjinud", avatar: "resources/img/Taodjinud.jpeg" },
     { name: "OpenTheFckingStrait", avatar: "resources/img/OpenTheFckingStrait.jpeg" },
-    { name: "JamesMoriarty8", avatar: "resources/img/JamesMoriarty8.jpeg" },
-    { name: "thoryr", avatar: "resources/img/thoryr.jpeg" }
+    { name: "JamesMoriarty8", avatar: "resources/img/JamesMoriarty8.jpeg" }
   ],
 
   // Firebase Configuration
@@ -117,6 +116,7 @@ const TOURNAMENT_CONFIG = {
     appId: "1:428892548438:web:8c7a105e25fedd868b7af7"
   }
 };
+
 
 // Initialize the tournament
 initTournament(TOURNAMENT_CONFIG.players, TOURNAMENT_CONFIG.id, TOURNAMENT_CONFIG.firebase);

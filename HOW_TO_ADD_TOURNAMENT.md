@@ -1,123 +1,146 @@
-# How to Add a New Tournament
+# How to Add a Tournament
 
-This project uses a shared codebase for all tournaments. All common styles and logic are in:
-- `tournament-common.css` - Shared styles
-- `tournament-common.js` - Shared JavaScript logic
+There are now **two kinds** of tournament pages:
 
-## Adding Tournament 3 (or any new tournament)
+| Kind | Pages | How a new one is added |
+|------|-------|------------------------|
+| **Legacy (1–4)** | `index1.html` … `index4.html` | Frozen. Keep working exactly as before. Don't add new ones this way. |
+| **Dynamic (5+)** | The hub, `index.html` | **No new files, no code, no new Firebase node.** Add one child under `tournaments`. |
 
-### Step 1: Copy the Template
+Shared code lives in:
+- `tournament-common.css` – styles
+- `tournament-common.js` – logic (scoring, rendering, the dynamic hub)
 
-Copy `index.html` to `index3.html`:
+---
+
+## The dynamic hub (`index.html`)
+
+`index.html` reads a **registry** from the Firebase Realtime Database node
+`tournaments`, builds the navigation menu from it, and renders the selected
+tournament in place.
+
+- Legacy entries (`legacy: true`) are just menu links to `indexN.html`.
+- Dynamic entries carry a full `setup` + `players` config and render inside the
+  hub. They are addressed by URL hash: `index.html#t=<id>` (e.g. `#t=t5`).
+- With no hash, the hub shows the **newest** dynamic tournament (highest `order`).
+
+### Where match results are stored
+
+Everything about a dynamic tournament — **config *and* match results** — lives
+inside its registry entry:
+
+```
+tournaments/
+  t5/
+    order, title, legacy, setup{…}, players[…]   ← config
+    results/                                       ← match results
+      "0-1": "1:0"
+      "2-3": "0:1"
+```
+
+Because results are nested under `tournaments` (not a separate top-level node),
+creating a tournament never requires a new database node or a new security
+rule. Legacy tournaments 1–4 still use their own top-level nodes
+(`results`, `tournament2`, `tournament3`, `tournament4`) — unchanged.
+
+---
+
+## Add a new dynamic tournament (Tournament 5, 6, …)
+
+### 1. One-time Firebase rules (already done for this project)
+
+The rules in **`firebase-rules.json`** open the `tournaments` node (which holds
+every dynamic tournament's config *and* results) plus the four legacy nodes.
+They're already published for this project, so **adding tournaments needs no
+further rule changes, ever.** To reapply them: Firebase Console → Realtime
+Database → **Rules** → paste `firebase-rules.json` → **Publish**.
+
+### 2. Add a registry entry
+
+In the console, open the `tournaments` node and add a child. The `id` you
+choose (e.g. `t6`) is what appears in the URL as `#t=t6`.
+
+```jsonc
+"t6": {
+  "order": 6,                    // menu order; newest = shown by default
+  "title": "Tournament 6",
+  "legacy": false,               // false = rendered by the hub
+
+  "setup": {
+    "mapType": "Drylands",             // Map type
+    "mapSize": "Normal (196 tiles)",   // Map size
+    "botCount": 14,                    // Number of bots
+    "botDifficulty": "Crazy",          // Bot difficulty (optional)
+    "nation": "Ai-Mo",                 // Nation
+    "style": "glory",                  // "might" or "glory"
+    "gloryTier": "15k"                 // only for glory: "5k" | "10k" | "15k" | "20k" | "25k"
+  },
+
+  "players": [
+    "OneHourPlayer",
+    "MorPet87"
+    // …add the rest
+  ]
+}
+```
+
+`players` is a **simple list of nicknames** — nothing else. The avatar is not
+stored in the database; the app derives it from the nickname as
+`resources/img/<nickname>.jpeg`. So the nickname must match the image filename
+exactly (case-sensitive). If no image exists, it falls back to auto-generated
+initials.
+
+Don't add a `results` child yourself — the app creates
+`tournaments/t6/results` the first time a match result is saved.
+
+The header subtitle is generated automatically from `setup`, e.g.:
+`Style: Glory 15k · Map: Drylands · Size: Normal (196 tiles) · Nation: Ai-Mo · Bots: 14 Crazy`
+(For `"style": "might"` the tier is omitted and it reads `Style: Might`.)
+
+### 3. Player avatars
+
+Avatars are **not** in the database. Put each player's image at
+`resources/img/<nickname>.jpeg` (filename must match the nickname exactly).
+Missing images fall back to auto-generated initials. An optional winner video
+can be added at `resources/video/<nickname>.mp4`.
+
+That's it — reload `index.html` and the new tournament appears in the menu.
+
+---
+
+## Seeding / editing the registry from the command line
+
+Instead of the console UI you can edit `scripts/tournaments-seed.json` and push
+it (requires Node 18+):
 
 ```bash
-cp index.html index3.html
+node scripts/seed-firebase.mjs          # merge (PATCH) the registry — preserves saved results
+node scripts/seed-firebase.mjs --verify # read it back
 ```
 
-### Step 2: Edit the Configuration
+`seed-firebase.mjs` uses PATCH per entry, so re-running it updates config
+without wiping any `results` already saved under a tournament.
 
-Open `index3.html` and modify **only** the configuration section at the bottom:
+---
 
-```javascript
-const TOURNAMENT_CONFIG = {
-  id: 'tournament3',  // ← Change this (must be unique!)
-                      // NOTE: Tournament 1 uses 'results' for backward compatibility
+## Registry field reference
 
-  // Tournament Settings
-  title: 'Polytopia Tournament 3',  // ← Change the title
-  subtitle: 'Game Mode: 1v1 · Drylands · Kickoo',  // ← Change game mode if needed
+| Field | Applies to | Meaning |
+|-------|-----------|---------|
+| `order` | all | Menu order (ascending). Newest dynamic = default view. |
+| `title` | all | Menu label + page heading. |
+| `legacy` | all | `true` → menu link to `href`. `false` → rendered by the hub. |
+| `href` | legacy | Target page, e.g. `index2.html`. |
+| `setup.mapType` | dynamic | Map type. |
+| `setup.mapSize` | dynamic | Map size. |
+| `setup.botCount` | dynamic | Number of bots. |
+| `setup.botDifficulty` | dynamic | Bot difficulty (optional). |
+| `setup.nation` | dynamic | Nation. |
+| `setup.style` | dynamic | `"might"` or `"glory"`. |
+| `setup.gloryTier` | dynamic | Glory score tier (only when style is glory). |
+| `players[]` | dynamic | Simple list of nicknames (strings). Avatar derived as `resources/img/<nickname>.jpeg`. Round-robin derived from length. |
+| `results` | dynamic | Auto-created by the app under `tournaments/<id>/results`. Don't hand-edit. |
 
-  // Players List - Add/remove/modify players
-  players: [
-    { name: "Player1", avatar: "resources/img/Player1.jpeg" },
-    { name: "Player2", avatar: "resources/img/Player2.jpeg" },
-    // Add more players here...
-  ],
+## What is shared (do not edit per tournament)
 
-  // Firebase Configuration (same for all tournaments)
-  firebase: {
-    apiKey: "AIzaSyBZtsslw-R17toTXbKBoikhc0vyOdAeDe0",
-    authDomain: "polytournament-87d5b.firebaseapp.com",
-    databaseURL: "https://polytournament-87d5b-default-rtdb.firebaseio.com",
-    projectId: "polytournament-87d5b",
-    storageBucket: "polytournament-87d5b.firebasestorage.app",
-    messagingSenderId: "428892548438",
-    appId: "1:428892548438:web:8c7a105e25fedd868b7af7"
-  }
-};
-```
-
-### Step 3: Update Navigation Menu
-
-In the `<div class="tournament-nav">` section, add the new tournament link:
-
-```html
-<div class="tournament-nav">
-  <a href="index.html">Tournament 1</a>
-  <a href="index2.html">Tournament 2</a>
-  <a href="index3.html" class="active">Tournament 3</a>  <!-- Add this -->
-</div>
-```
-
-Also update the `class="active"` to mark which tournament page you're on.
-
-### Step 4: Update Page Title
-
-Change the `<title>` tag in the `<head>` section:
-
-```html
-<title>Polytopia Tournament 3</title>
-```
-
-### Step 5: Update Header
-
-Change the header text in the HTML body:
-
-```html
-<div class="title-eyebrow">⚔ Tournament 3 ⚔</div>
-<h1>Polytopia Tournament 3</h1>
-```
-
-### Step 6: Add Player Images
-
-If you have new players, add their images to:
-```
-resources/img/PlayerName.jpeg
-```
-
-### Step 7: Update All Existing Tournament Pages
-
-Don't forget to add the new tournament link to the navigation menu in ALL tournament pages:
-- `index.html`
-- `index2.html`
-- Any other tournament pages
-
-## Important Notes
-
-1. **Tournament ID must be unique** - Each tournament needs a unique `id` in the config
-2. **Don't modify shared files** - Never edit `tournament-common.css` or `tournament-common.js` unless you want to change ALL tournaments
-3. **Data is stored separately** - Each tournament stores its data in Firebase under its unique ID
-4. **Player avatars are shared** - All tournaments can use the same `resources/img/` folder
-
-## What You Can Customize Per Tournament
-
-✅ Tournament ID
-✅ Tournament title and subtitle
-✅ Players list
-✅ Number of players (can be different for each tournament)
-
-## What Is Shared
-
-🔒 All styling (colors, fonts, layout)
-🔒 All game logic (ranking, head-to-head tiebreakers)
-🔒 All UI components (matrix, scoreboard, popups)
-🔒 Firebase configuration
-
-## Testing
-
-After creating a new tournament, open it in your browser and verify:
-- [ ] Navigation menu works and shows correct active state
-- [ ] Player names and avatars display correctly
-- [ ] Results can be entered and saved
-- [ ] Rankings update properly
-- [ ] Winner celebration triggers when tournament completes
+🔒 Styling, scoring/ranking logic, matrix/scoreboard/popup UI, Firebase config.
