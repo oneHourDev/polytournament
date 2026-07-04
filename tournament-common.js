@@ -526,27 +526,6 @@ function setPlayers(players) {
   TOTAL = (N * (N - 1)) / 2;
 }
 
-// Used by the legacy per-tournament pages (index1.html … index4.html).
-function initTournament(players, tournamentId, firebaseConfig) {
-  // Inject shared UI templates
-  injectSharedTemplates();
-
-  // Set globals
-  setPlayers(players);
-  window.TOURNAMENT_ID = tournamentId;
-
-  // Try Firebase first, fallback to localStorage
-  const firebaseConnected = ensureFirebaseApp(firebaseConfig) && subscribeResults(tournamentId);
-
-  if (!firebaseConnected) {
-    loadFromStorage();
-  }
-
-  // Initial render
-  render();
-  checkTournamentComplete();
-}
-
 // ─── DYNAMIC HUB (Tournament 2.0) ──────────────────────────────────────────
 // Build the "Style: Glory 15k · Map: … · Bots: 14 Crazy" subtitle from a
 // structured setup object stored in Firebase.

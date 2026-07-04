@@ -9,10 +9,10 @@ Shared code lives in:
 - `tournament-common.css` – styles
 - `tournament-common.js` – logic (scoring, rendering, the dynamic hub)
 
-> **Legacy pages** `index1.html` … `index4.html` (and the old top-level result
-> nodes `results`, `tournament2`, `tournament3`, `tournament4`) are kept as
-> read-only backups of the pre-migration data. The live site is served entirely
-> by the hub; the legacy pages are no longer linked and can be removed later.
+> The old per-tournament pages (`index1.html` … `index4.html`) have been removed
+> — the hub serves every tournament now. The original top-level result nodes
+> (`results`, `tournament2`, `tournament3`, `tournament4`) are left in Firebase
+> as a read-only backup of the pre-migration data.
 
 ---
 
@@ -138,7 +138,7 @@ without wiping any `results` already saved under a tournament.
 | `order` | all | Menu order (ascending). Newest dynamic = default view. |
 | `title` | all | Menu label + page heading. |
 | `legacy` | all | `true` → menu link to `href`. `false` → rendered by the hub. |
-| `href` | legacy | Target page, e.g. `index2.html`. |
+| `href` | legacy | Link target when `legacy: true` (any URL). |
 | `subtitle` | optional | Verbatim subtitle string; overrides the one built from `setup`. |
 | `setup.mapType` | dynamic | Map type. |
 | `setup.mapSize` | dynamic | Map size. |
