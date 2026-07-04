@@ -142,8 +142,11 @@ Nicknames only. n8n turns this into a group message.
    firebase deploy --only functions
    ```
    (Or set env vars `N8N_SHARED_SECRET` / `N8N_WEBHOOK_URL`.)
-3. **Point n8n** at the `botCommand` URL (for `/sign-in`) and receive the score
-   webhook, sending the same shared secret header both ways.
+3. **Import the n8n workflows** from [`n8n/`](n8n/README.md) (`whatsapp-signin`
+   and `score-announcement`) and follow [`n8n/README.md`](n8n/README.md): set the
+   env vars, wire your WhatsApp provider, and point
+   `n8n.webhook_url` at the score-announcement webhook. The same shared secret is
+   sent both ways.
 
 ## Security
 

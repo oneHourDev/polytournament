@@ -1,0 +1,105 @@
+{
+  "name": "Polytournament – Score Announcement",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "score-announcement",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wf2-webhook",
+      "name": "Score Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-360, 300],
+      "webhookId": "polytournament-score-announcement"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            {
+              "id": "wf2-cond-secret",
+              "leftValue": "={{ $json.headers['x-webhook-secret'] }}",
+              "rightValue": "={{ $env.N8N_SHARED_SECRET }}",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "wf2-auth",
+      "name": "Verify Shared Secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-140, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Build the group message from the Cloud Function payload (nicknames only).\nconst p = $json.body || {};\nconst score = p.result ? ` (${p.result})` : '';\nconst message = `🏆 ${p.winner_nickname} beat ${p.loser_nickname} in ${p.tournament_title}${score}.`;\nreturn [{ json: { message } }];"
+      },
+      "id": "wf2-format",
+      "name": "Format Announcement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WA_SEND_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chatId: $env.WA_GROUP_ID, text: $json.message }) }}",
+        "options": {}
+      },
+      "id": "wf2-send",
+      "name": "Send WhatsApp Group",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {}
+      },
+      "id": "wf2-respond-ok",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [560, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'unauthorized' }) }}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "wf2-respond-401",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [120, 420]
+    }
+  ],
+  "connections": {
+    "Score Webhook": { "main": [[{ "node": "Verify Shared Secret", "type": "main", "index": 0 }]] },
+    "Verify Shared Secret": {
+      "main": [
+        [{ "node": "Format Announcement", "type": "main", "index": 0 }],
+        [{ "node": "Respond 401", "type": "main", "index": 0 }]
+      ]
+    },
+    "Format Announcement": { "main": [[{ "node": "Send WhatsApp Group", "type": "main", "index": 0 }]] },
+    "Send WhatsApp Group": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
