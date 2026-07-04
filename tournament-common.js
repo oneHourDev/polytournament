@@ -580,7 +580,11 @@ function initTournament(players, tournamentId, firebaseConfig) {
 // ─── DYNAMIC HUB (Tournament 2.0) ──────────────────────────────────────────
 // Build the "Style: Glory 15k · Map: … · Bots: 14 Crazy" subtitle from a
 // structured setup object stored in Firebase.
-function buildSubtitle(setup) {
+function buildSubtitle(setup, override) {
+  // An explicit subtitle string wins — used to preserve the exact wording of
+  // tournaments whose descriptor doesn't fit the structured setup schema
+  // (e.g. the early 1v1 PvP tournaments).
+  if (override) return override;
   if (!setup) return '';
   const parts = [];
   if (setup.style) {
@@ -653,7 +657,7 @@ function loadDynamicTournament(entry) {
   const h1 = document.getElementById('hub-title');
   const sub = document.getElementById('hub-subtitle');
   if (h1) h1.textContent = title;
-  if (sub) sub.textContent = buildSubtitle(entry.setup);
+  if (sub) sub.textContent = buildSubtitle(entry.setup, entry.subtitle);
 
   setPlayers(entry.players || []);
   // Match results live INSIDE the registry entry, so creating a tournament is
