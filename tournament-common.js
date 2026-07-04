@@ -70,8 +70,9 @@ function autoSave() {
 // ─── SCORE DOCS (feed the WhatsApp announcement Cloud Function) ──────────────
 // Alongside the positional `results` map (used for ranking), we write a richer
 // per-match "score doc" under tournaments/<id>/scores/<matchId>. It carries an
-// explicit winner_nickname and a `notified` flag; the onScoreCreate Cloud
-// Function reads winner_nickname (never recomputes it) and announces once.
+// explicit winner_nickname and a `notified` flag; the onScoreWrite Cloud
+// Function reads winner_nickname (never recomputes it) and announces. Writing
+// the doc with notified:false on every save lets a correction re-announce.
 // Scores are Firebase-only (no localStorage fallback — no bot when offline).
 function scoresBasePath() {
   if (!currentResultsPath) return null;

@@ -60,22 +60,24 @@ exports.botCommand = functions.https.onRequest(async (req, res) => {
 });
 
 // ── Feature 2: score → WhatsApp announcement (here → n8n) ─────────────────────
-// Fires once per NEW score (onCreate only — corrections/edits do not re-notify).
-// The winner is taken from the explicit `winner_nickname` field, never computed.
-exports.onScoreCreate = functions.database
+// onWrite: announces on new scores AND on corrections (the frontend resets
+// `notified: false` on every save). The notified flag skips our own follow-up
+// write, so there is no trigger loop; deletes arrive as a null value and are
+// skipped. The winner is taken from the explicit `winner_nickname` field.
+exports.onScoreWrite = functions.database
   .ref('tournaments/{tid}/scores/{matchId}')
-  .onCreate(async (snapshot, context) => {
+  .onWrite(async (change, context) => {
     const { secret, webhookUrl } = cfg();
-    const score = snapshot.val();
+    const score = change.after.exists() ? change.after.val() : null;
     const tid = context.params.tid;
     const tournament = await db.get(`tournaments/${tid}`);
-    return core.handleScoreCreate({
+    return core.handleScoreWrite({
       score,
       tournamentId: tid,
       matchId: context.params.matchId,
       tournament,
       secret,
       postWebhook: (payload, sec) => core.postJson(webhookUrl, payload, sec),
-      setNotified: () => snapshot.ref.child('notified').set(true),
+      setNotified: () => change.after.ref.child('notified').set(true),
     });
   });

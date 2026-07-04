@@ -98,9 +98,11 @@ Responses:
 
 ## Feature 2 — Score → WhatsApp announcement
 
-**Trigger:** `onScoreCreate` on `tournaments/{tid}/scores/{matchId}`, **onCreate
-only** — corrections/edits to an existing score do **not** re-announce. The
-`notified` flag additionally guards against re-runs/redeploys.
+**Trigger:** `onScoreWrite` on `tournaments/{tid}/scores/{matchId}`, **onWrite** —
+announces on new scores **and on corrections**. The frontend rewrites the doc
+with `notified: false` on every save, so a genuine correction re-announces,
+while the function's own `notified: true` follow-up write is skipped (no trigger
+loop) and deletes (null value) are ignored.
 
 The winner is taken from the explicit **`winner_nickname`** field (never
 computed from raw scores, avoiding draw/tie ambiguity). The function POSTs to the
@@ -157,9 +159,9 @@ Nicknames only. n8n turns this into a group message.
 
 ## Open decisions (flagged for a human call)
 
-1. **onCreate vs onWrite** — implemented **onCreate only** so corrections don't
-   re-notify (per spec). If you want corrected results to re-announce, switch to
-   `onWrite` + reset `notified` on change.
+1. **onCreate vs onWrite** — implemented **onWrite**: corrections re-announce
+   (the frontend resets `notified: false` on every save, and the function's own
+   `notified: true` write is skipped, so there is no trigger loop).
 2. **`scores` parallel to `results`** — kept the positional `results` for
    ranking and added `scores` for the explicit winner/notification record.
    Low-risk but two nodes to keep consistent (the frontend writes/deletes both

@@ -155,7 +155,7 @@ function scoreDoc(over) {
 test('score trigger fires exactly once for a new score', async () => {
   let posts = 0;
   let notifiedSet = false;
-  const out = await core.handleScoreCreate({
+  const out = await core.handleScoreWrite({
     score: scoreDoc(),
     tournamentId: 't5',
     matchId: '0-1',
@@ -169,22 +169,48 @@ test('score trigger fires exactly once for a new score', async () => {
   assert.equal(out.notified, true);
 });
 
-test('notified flag prevents duplicate announcement (re-run/redeploy)', async () => {
+test('notified flag skips our own follow-up write (no trigger loop)', async () => {
   let posts = 0;
-  const args = {
+  const out = await core.handleScoreWrite({
     score: scoreDoc({ notified: true }),
     tournamentId: 't5', matchId: '0-1', tournament: { title: 'Tournament 5' }, secret: 'S',
     postWebhook: async () => { posts++; },
     setNotified: async () => {},
-  };
-  const out = await core.handleScoreCreate(args);
+  });
   assert.equal(posts, 0);
   assert.equal(out.skipped, 'already_notified');
 });
 
+test('onWrite re-announces a correction (frontend resets notified:false)', async () => {
+  // A corrected result is saved by the frontend as a full doc with notified:false
+  // and a possibly different winner — it should announce again.
+  let posts = 0;
+  let lastWinner = null;
+  const out = await core.handleScoreWrite({
+    score: scoreDoc({ notified: false, winner_nickname: 'WestieWarrior', loser_nickname: 'MorPet87', result: '0:1' }),
+    tournamentId: 't5', matchId: '0-1', tournament: { title: 'Tournament 5' }, secret: 'S',
+    postWebhook: async (p) => { posts++; lastWinner = p.winner_nickname; },
+    setNotified: async () => {},
+  });
+  assert.equal(posts, 1);
+  assert.equal(lastWinner, 'WestieWarrior');
+  assert.equal(out.notified, true);
+});
+
+test('onWrite skips a delete (score removed → null)', async () => {
+  let posts = 0;
+  const out = await core.handleScoreWrite({
+    score: null,
+    tournamentId: 't5', matchId: '0-1', tournament: {}, secret: 'S',
+    postWebhook: async () => { posts++; }, setNotified: async () => {},
+  });
+  assert.equal(posts, 0);
+  assert.equal(out.skipped, 'no_score');
+});
+
 test('score without winner_nickname is skipped (no ambiguous computation)', async () => {
   let posts = 0;
-  const out = await core.handleScoreCreate({
+  const out = await core.handleScoreWrite({
     score: scoreDoc({ winner_nickname: undefined }),
     tournamentId: 't5', matchId: '0-1', tournament: {}, secret: 'S',
     postWebhook: async () => { posts++; }, setNotified: async () => {},
