@@ -205,7 +205,6 @@ function sortByRank(stats) {
 function render() {
   renderMatrix();
   renderScoreboard();
-  renderRankings();
   renderProgress();
 }
 
@@ -265,35 +264,6 @@ function renderScoreboard() {
     </div>`;
   });
   document.getElementById('scoreboard').innerHTML = html;
-}
-
-function renderRankings() {
-  const stats = sortByRank(calcStats());
-  let html = '';
-  let displayRank = 1;
-  let tieGroupStart = null;
-
-  stats.forEach((s, idx) => {
-    if (idx > 0 && s.pts === stats[idx - 1].pts && s.isTied && stats[idx - 1].isTied) {
-      if (tieGroupStart === null) tieGroupStart = displayRank;
-    } else {
-      tieGroupStart = null;
-      displayRank = idx + 1;
-    }
-
-    const rankDisplay = tieGroupStart !== null ? `T${tieGroupStart}` : `${displayRank}`;
-    const tieIcon = s.isTied && idx === 0 ? ' 🤝' : '';
-
-    html += `<tr>
-      <td class="rank-no">${rankDisplay}.</td>
-      <td><div class="rank-name">${avatarEl(s.idx, 42)} ${PLAYERS[s.idx].name}${tieIcon}</div></td>
-      <td class="pts">${s.pts}</td>
-      <td class="wins">${s.wins}</td>
-      <td class="losses">${s.losses}</td>
-      <td style="color:var(--muted)">${s.remaining}</td>
-    </tr>`;
-  });
-  document.getElementById('rank-body').innerHTML = html;
 }
 
 function renderProgress() {
