@@ -1,5 +1,5 @@
 {
-  "name": "Polytournament – Score Announcements (poll, no Cloud Functions)",
+  "name": "Polytournament – Score Announcements (poll → Whapi.Cloud)",
   "nodes": [
     {
       "parameters": {
@@ -17,8 +17,9 @@
           "assignments": [
             { "id": "a1", "name": "fbUrl", "value": "={{ $env.FIREBASE_DB_URL }}", "type": "string" },
             { "id": "a2", "name": "fbAuth", "value": "={{ $env.FIREBASE_AUTH_QS || '' }}", "type": "string" },
-            { "id": "a3", "name": "waSendUrl", "value": "={{ $env.WA_SEND_URL }}", "type": "string" },
-            { "id": "a4", "name": "waGroupId", "value": "={{ $env.WA_GROUP_ID }}", "type": "string" }
+            { "id": "a3", "name": "whapiBase", "value": "={{ $env.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
+            { "id": "a4", "name": "whapiToken", "value": "={{ $env.WHAPI_TOKEN }}", "type": "string" },
+            { "id": "a5", "name": "waGroupId", "value": "={{ $env.WA_GROUP_ID }}", "type": "string" }
           ]
         },
         "options": {}
@@ -32,10 +33,10 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── Bot logic mirrored from n8n/lib/bot-logic.js (keep in sync) ──\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction selectAnnouncements(scores){return Object.entries(scores||{}).filter(([,s])=>s&&s.winner_nickname&&s.notified!==true).map(([matchId,s])=>Object.assign({matchId},s));}\nfunction announcementText(s,title){const t=title||s.tournament_id||'the tournament';const suf=s.result?' ('+s.result+')':'';return '🏆 '+s.winner_nickname+' beat '+s.loser_nickname+' in '+t+suf+'.';}\n\nconst cfg = $json;\nconst q = cfg.fbAuth || '';\n\n// Poll the active tournament's scores.\nlet tid = await this.helpers.httpRequest({url: cfg.fbUrl+'/latest_tournament.json'+q, json:true}).catch(()=>null);\nif(!(tid && typeof tid==='string')){ const reg = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments.json'+q, json:true}).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return [{ json: { announced: 0, note: 'no active tournament' } }]; }\n\nconst title = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true}).catch(()=>tid);\nconst scores = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments/'+tid+'/scores.json'+q, json:true}).catch(()=>({}));\nconst pending = selectAnnouncements(scores);\n\nlet announced = 0;\nfor(const s of pending){\n  const message = announcementText(s, title);\n  if(cfg.waSendUrl){ await this.helpers.httpRequest({method:'POST', url: cfg.waSendUrl, body:{ chatId: cfg.waGroupId, text: message }, json:true}); }\n  // Mark notified so it is not announced again (corrections reset it to false).\n  await this.helpers.httpRequest({method:'PATCH', url: cfg.fbUrl+'/tournaments/'+tid+'/scores/'+s.matchId+'.json'+q, body:{ notified: true }, json:true});\n  announced++;\n}\nreturn [{ json: { tid, announced } }];"
+        "jsCode": "// ── Bot logic mirrored from n8n/lib/bot-logic.js (keep in sync) ──\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction selectAnnouncements(scores){return Object.entries(scores||{}).filter(([,s])=>s&&s.winner_nickname&&s.notified!==true).map(([matchId,s])=>Object.assign({matchId},s));}\nfunction announcementText(s,title){const t=title||s.tournament_id||'the tournament';const suf=s.result?' ('+s.result+')':'';return '🏆 '+s.winner_nickname+' beat '+s.loser_nickname+' in '+t+suf+'.';}\n\nconst cfg = $json;\nconst q = cfg.fbAuth || '';\n\n// Poll the active tournament's scores.\nlet tid = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nif(!(tid && typeof tid==='string')){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return [{ json: { announced: 0, note: 'no active tournament' } }]; }\n\nconst title = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true }).catch(()=>tid);\nconst scores = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/scores.json'+q, json:true }).catch(()=>({}));\nconst pending = selectAnnouncements(scores);\n\nlet announced = 0;\nfor(const s of pending){\n  const message = announcementText(s, title);\n  if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: cfg.waGroupId, body: message }, json:true }); }\n  // Mark notified so it is not announced again (corrections reset it to false).\n  await this.helpers.httpRequest({ method:'PATCH', url: cfg.fbUrl+'/tournaments/'+tid+'/scores/'+s.matchId+'.json'+q, body:{ notified: true }, json:true });\n  announced++;\n}\nreturn [{ json: { tid, announced } }];"
       },
       "id": "wf2-poll",
-      "name": "Poll & Announce (Firebase REST)",
+      "name": "Poll & Announce (Whapi + Firebase)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [40, 300]
@@ -43,7 +44,7 @@
   ],
   "connections": {
     "Every minute": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
-    "Config": { "main": [[{ "node": "Poll & Announce (Firebase REST)", "type": "main", "index": 0 }]] }
+    "Config": { "main": [[{ "node": "Poll & Announce (Whapi + Firebase)", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

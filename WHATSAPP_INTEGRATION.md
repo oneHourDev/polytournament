@@ -5,11 +5,11 @@ Two features connect a WhatsApp group to the tournament tracker through a privat
 Functions and no Blaze plan required**. Everything runs on the free Spark plan.
 
 ```
-WhatsApp group  ⇄  n8n (private)  ──REST──▶  Firebase RTDB  ◀──  frontend
-                     │                          ▲
-   phone → nickname  │   nicknames only         │  writes scores (notified:false)
-   resolved here     │                          │  reads players/participants
-   ALL secrets here  ┘
+WhatsApp group ⇄ Whapi.Cloud ⇄ n8n (private) ──REST──▶ Firebase RTDB ◀── frontend
+   (bot number,    (hosted        │                       ▲
+    scan QR)        gateway)      │  nicknames only        │  writes scores (notified:false)
+                phone → nickname  │                        │  reads players/participants
+                resolved here — ALL secrets in n8n
 ```
 
 > **No PII, no frontend secrets.** Phone numbers live **only** inside one n8n
@@ -76,19 +76,25 @@ truth): `resolveSignIn`, `matchRoster`, `pickLatestTid`, `selectAnnouncements`,
 
 1. **Publish DB rules** — Firebase Console → Realtime Database → Rules → paste
    `firebase-rules.json` → Publish. (Already done; enables `latest_tournament`.)
-2. **Import the workflows** from [`n8n/`](n8n/README.md) and set the env vars
-   (below). Put your real phone→nickname map in the `Handle Sign-in` node, and
-   wire your WhatsApp provider's inbound webhook + send endpoint.
+2. **Set up Whapi.Cloud + import the workflows** — follow
+   [`n8n/README.md`](n8n/README.md): create a Whapi channel, scan the QR to link
+   the bot number, point Whapi's inbound webhook at n8n's `/webhook/whatsapp-inbound`,
+   set the env vars (below), and put your real phone→nickname map in the
+   `Handle Sign-in` node.
 3. Activate both workflows.
 
 ### n8n environment variables (all secrets stay here)
 
+The bot number connects through **Whapi.Cloud** (hosted gateway — scan a QR to
+link the number; see [`n8n/README.md`](n8n/README.md) step 1).
+
 | Var | Used by | Value |
 |-----|---------|-------|
+| `WHAPI_TOKEN` | both | Your Whapi.Cloud channel Bearer token |
+| `WHAPI_BASE` | both | *(optional)* defaults to `https://gate.whapi.cloud` |
+| `WA_GROUP_ID` | announcements | Target group id (`...@g.us`) |
 | `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
 | `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you later lock down the DB |
-| `WA_SEND_URL` | both | Your WhatsApp provider's send-message endpoint |
-| `WA_GROUP_ID` | announcements | Target group chat id |
 
 ---
 
