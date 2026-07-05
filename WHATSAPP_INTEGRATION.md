@@ -83,10 +83,11 @@ truth): `resolveSignIn`, `matchRoster`, `pickLatestTid`, `selectAnnouncements`,
    `Handle Sign-in` node.
 3. Activate both workflows.
 
-### n8n environment variables (all secrets stay here)
+### n8n Variables — Settings → Variables (all secrets stay here)
 
 The bot number connects through **Whapi.Cloud** (hosted gateway — scan a QR to
-link the number; see [`n8n/README.md`](n8n/README.md) step 1).
+link the number; see [`n8n/README.md`](n8n/README.md) step 1). On n8n Cloud the
+workflows read config from **Variables** (`$vars`), not environment variables.
 
 | Var | Used by | Value |
 |-----|---------|-------|

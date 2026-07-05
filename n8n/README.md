@@ -31,15 +31,23 @@ reads/writes and Whapi sends use `this.helpers.httpRequest` inside the Code node
 n8n → **Workflows** → **Import from File** → each `*.workflow.json`. They import
 **inactive**. Set the variables below, then activate both.
 
-## 3. Environment variables (all secrets stay in n8n)
+## 3. n8n Variables (Settings → Variables)
 
-| Var | Used by | Value |
-|-----|---------|-------|
+On **n8n Cloud** you can't set custom environment variables, so these workflows
+read config from **n8n Variables** (`$vars`). Add each one under
+**Settings → Variables** (all secrets stay inside n8n):
+
+| Variable | Used by | Value |
+|----------|---------|-------|
 | `WHAPI_TOKEN` | both | Your Whapi channel Bearer token |
 | `WHAPI_BASE` | both | *(optional)* defaults to `https://gate.whapi.cloud` |
 | `WA_GROUP_ID` | announcements | Target group id (`...@g.us`) |
 | `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
 | `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you lock down the DB |
+
+> If your n8n plan doesn't include Variables, either paste the values directly
+> into the **Config** node fields, or store the Whapi token as an HTTP **Header
+> Auth credential** instead.
 
 ## The PII boundary (important)
 

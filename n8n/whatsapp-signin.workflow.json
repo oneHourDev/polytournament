@@ -19,10 +19,10 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "a1", "name": "fbUrl", "value": "={{ $env.FIREBASE_DB_URL }}", "type": "string" },
-            { "id": "a2", "name": "fbAuth", "value": "={{ $env.FIREBASE_AUTH_QS || '' }}", "type": "string" },
-            { "id": "a3", "name": "whapiBase", "value": "={{ $env.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
-            { "id": "a4", "name": "whapiToken", "value": "={{ $env.WHAPI_TOKEN }}", "type": "string" }
+            { "id": "a1", "name": "fbUrl", "value": "={{ $vars.FIREBASE_DB_URL }}", "type": "string" },
+            { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS || '' }}", "type": "string" },
+            { "id": "a3", "name": "whapiBase", "value": "={{ $vars.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
+            { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" }
           ]
         },
         "options": {}
