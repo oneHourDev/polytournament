@@ -118,63 +118,76 @@
       "name": "Get Nickname (Data Table)",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [0, -80],
+      "position": [20, -120],
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── sign-in: nickname from the Data Table row → match roster → write participant.\n// Confirms exactly what happened (newly signed in vs. already signed in). ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId; const who = '@'+p.number+' ';\nconst q = cfg.fbAuth || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message){ if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); } return [{ json:{ chatId, message } }]; }\n\nif(!nickname){ return await send.call(this, who+'your number is not registered for this tournament.'); }\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, who+'there is no active tournament right now.'); }\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, who+'\"'+nickname+'\" is not on the player list for '+tid+'.'); }\nconst title = (await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true }).catch(()=>null)) || tid;\nconst pKey = sanitizeKey(match);\nconst existing = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, json:true }).catch(()=>null);\nif(existing && existing.nickname){ return await send.call(this, who+'ℹ️ '+match+' is already signed in to '+title+'.'); }\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, body: record, json:true });\nreturn await send.call(this, who+'✅ Signed in! '+match+' is now registered for '+title+'.');"
+        "jsCode": "// ── sign-in: nickname from the Data Table row → match roster → write participant.\n// Confirms exactly what happened (newly signed in vs. already signed in). ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId; const who = '@'+p.number+' '; const M = [p.number];\nconst q = cfg.fbAuth || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message, mentions){ const b = { to: chatId, body: message }; if(mentions && mentions.length) b.mentions = mentions; if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); } return [{ json:{ message } }]; }\n\nif(!nickname){ return await send.call(this, who+'your number is not registered for this tournament.', M); }\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, who+'there is no active tournament right now.', M); }\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, who+'\"'+nickname+'\" is not on the player list for '+tid+'.', M); }\nconst title = (await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true }).catch(()=>null)) || tid;\nconst pKey = sanitizeKey(match);\nconst existing = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, json:true }).catch(()=>null);\nif(existing && existing.nickname){ return await send.call(this, who+'ℹ️ '+match+' is already signed in to '+title+'.', M); }\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, body: record, json:true });\nreturn await send.call(this, who+'✅ Signed in! '+match+' is now registered for '+title+'.', M);"
       },
       "id": "wf1-signin",
       "name": "Handle sign-in",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, -80]
+      "position": [240, -120]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Commands (tag me + the word):\\n• sign-in — join the current tournament\\n• help — show this help\\n• start-tournament — begin a tournament (coming soon)\\n• defeated @player — report that you beat @player';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
+        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Commands (tag me + the word):\\n• sign-in — join the current tournament\\n• help — show this help\\n• start-tournament — begin a tournament (coming soon)\\n• defeated @player — report that you beat @player';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
       },
       "id": "wf1-help",
       "name": "Handle help",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 100]
+      "position": [240, 60]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── start-tournament: placeholder (to be implemented). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' 🚧 start-tournament received — this command is coming soon.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'start-tournament' } }];"
+        "jsCode": "// ── start-tournament: placeholder (to be implemented). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' 🚧 start-tournament received — this command is coming soon.';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'start-tournament' } }];"
       },
       "id": "wf1-start",
       "name": "Handle start-tournament",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 280]
+      "position": [240, 220]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": { "__rl": true, "value": "8FGuvQ1TAYofF7F7", "mode": "list", "cachedResultName": "nickname_number_mapping", "cachedResultUrl": "/projects/ByzftX6HdGqx8b8x/datatables/8FGuvQ1TAYofF7F7" },
+        "filters": { "conditions": [ { "keyName": "number", "keyValue": "={{ ($json.targetPlayers && $json.targetPlayers[0]) || '' }}" } ] }
+      },
+      "id": "wf1-datatable2",
+      "name": "Get Opponent (Data Table)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [20, 400],
+      "alwaysOutputData": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── defeated @player: needs a tagged opponent. Result recording comes with\n// start-tournament (placeholder reply for now). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst target = (p.targetPlayers && p.targetPlayers[0]) || '';\nlet message;\nif(!target){ message = '@'+p.number+' tag the player you defeated, e.g. \"@bot defeated @player\".'; }\nelse { message = '@'+p.number+' 🚧 got it — you beat @'+target+'. Result recording is coming soon.'; }\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'defeated', target } }];"
+        "jsCode": "// ── defeated @player: resolve the tagged opponent's number → nickname via the\n// Data Table. Result recording comes with start-tournament (placeholder). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId;\nconst target = (p.targetPlayers && p.targetPlayers[0]) || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst oppNick = row.nickname ? String(row.nickname) : '';\n\nasync function send(message, mentions){ const b = { to: chatId, body: message }; if(mentions && mentions.length) b.mentions = mentions; if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); } return [{ json:{ message } }]; }\n\nif(!target){ return await send.call(this, '@'+p.number+' tag the player you defeated, e.g. \"@bot defeated @player\".', [p.number]); }\nif(!oppNick){ return await send.call(this, '@'+p.number+\" I don't recognize @\"+target+' as a registered player.', [p.number, target]); }\nreturn await send.call(this, '@'+p.number+' 🚧 got it — you beat @'+target+' ('+oppNick+'). Result recording is coming soon.', [p.number, target]);"
       },
       "id": "wf1-defeated",
       "name": "Handle defeated",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 460]
+      "position": [240, 400]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── default: unrecognized command. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' command not recognized. Tag me with \"help\" to see the commands.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'not_recognized' } }];"
+        "jsCode": "// ── default: unrecognized command. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' command not recognized. Tag me with \"help\" to see the commands.';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'not_recognized' } }];"
       },
       "id": "wf1-unknown",
       "name": "Command Not Recognized",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [0, 640]
+      "position": [-40, 620]
     }
   ],
   "connections": {
@@ -187,11 +200,12 @@
         [{ "node": "Get Nickname (Data Table)", "type": "main", "index": 0 }],
         [{ "node": "Handle help", "type": "main", "index": 0 }],
         [{ "node": "Handle start-tournament", "type": "main", "index": 0 }],
-        [{ "node": "Handle defeated", "type": "main", "index": 0 }],
+        [{ "node": "Get Opponent (Data Table)", "type": "main", "index": 0 }],
         [{ "node": "Command Not Recognized", "type": "main", "index": 0 }]
       ]
     },
-    "Get Nickname (Data Table)": { "main": [[{ "node": "Handle sign-in", "type": "main", "index": 0 }]] }
+    "Get Nickname (Data Table)": { "main": [[{ "node": "Handle sign-in", "type": "main", "index": 0 }]] },
+    "Get Opponent (Data Table)": { "main": [[{ "node": "Handle defeated", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
