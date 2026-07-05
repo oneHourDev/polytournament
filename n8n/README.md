@@ -63,19 +63,33 @@ After importing, open the **`Get Nickname (Data Table)`** node and:
 
 Add a row per player, e.g. `number = 420123456789`, `nickname = MorPet87`.
 
-## Command routing (separate nodes)
+## Command routing (mention-gated, separate nodes)
 
 ```
-Webhook → Config → Parse Message → Is a command? ─true→ Route Command ┬ /sign-in → Get Nickname → Handle /sign-in
-                                        └false→ (ignored)             └ (default) → Command Not Recognized
+Webhook → Config → Parse Message → Bot mentioned? ─true→ Route Command ┬ sign-in          → Get Nickname → Handle sign-in
+                                        └false→ (ignored)              ├ help             → Handle help
+                                                                       ├ start-tournament → Handle start-tournament
+                                                                       ├ defeated         → Handle defeated
+                                                                       └ (default)        → Command Not Recognized
 ```
 
-- **Parse Message** ignores the bot's own messages (`from_me`) and anything that
-  isn't a `/command`.
-- **Route Command** (Switch) sends `/sign-in` to its handler; **any other
-  command** falls through to the **Command Not Recognized** node, which replies
-  "Command not recognized." Add more commands as extra Switch outputs + handler
-  nodes later.
+- **The bot only reacts when it is @mentioned.** `Parse Message` checks
+  `messages[0].context.mentions` for the **bot number** (set in the `Config`
+  node's `botNumber`, default `420776374284`), and ignores the bot's own
+  messages (`from_me` or `from === botNumber`). Everything else is dropped.
+- **Commands are plain words after the mention** (no slash): the first non-`@`
+  word is the command. So `@bot sign-in`, `@bot help`, `@bot defeated @player`.
+- **Route Command** (Switch) sends each known word to its own handler node; any
+  other word falls through to **Command Not Recognized**. Replies tag the
+  requester (`@<sender>`).
+
+| Command | Node | Status |
+|---------|------|--------|
+| `sign-in` | Handle sign-in | ✅ implemented (Data Table → roster → participant) |
+| `help` | Handle help | ✅ lists all commands, tags requester |
+| `start-tournament` | Handle start-tournament | 🚧 placeholder ("coming soon") |
+| `defeated @player` | Handle defeated | 🚧 parses the tagged opponent; result recording TBD |
+| *(anything else)* | Command Not Recognized | ✅ "command not recognized" |
 
 ## How announcements work (no push, no Blaze)
 

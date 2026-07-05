@@ -12,17 +12,18 @@
       "name": "WhatsApp Inbound",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-680, 300],
+      "position": [-1056, 128],
       "webhookId": "polytournament-whatsapp-inbound"
     },
     {
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "a1", "name": "fbUrl", "value": "={{ $vars.FIREBASE_DB_URL }}", "type": "string" },
+            { "id": "a1", "name": "fbUrl", "value": "https://polytournament-87d5b-default-rtdb.firebaseio.com", "type": "string" },
             { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS || '' }}", "type": "string" },
             { "id": "a3", "name": "whapiBase", "value": "={{ $vars.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
-            { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" }
+            { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" },
+            { "id": "a5", "name": "botNumber", "value": "420776374284", "type": "string" }
           ]
         },
         "options": {}
@@ -31,35 +32,35 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [-480, 300]
+      "position": [-864, 128]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Parse the Whapi inbound message. Emits command='' for our own messages\n// (from_me) and for non-command chatter, so the IF node ignores them.\nconst body = $('WhatsApp Inbound').first().json.body || {};\nconst msg = (body.messages && body.messages[0]) || {};\nconst text = (msg.text && msg.text.body) ? String(msg.text.body).trim() : '';\nconst number = String(msg.from || '').replace(/[^0-9]/g, '');\nconst chatId = msg.chat_id || '';\nconst fromMe = msg.from_me === true;\nconst token = text.split(' ').filter(Boolean).find(t => t.charAt(0) === '/') || '';\nconst command = fromMe ? '' : token.toLowerCase();\nreturn [{ json: { command, number, chatId, text } }];"
+        "jsCode": "// The bot reacts ONLY when it is @mentioned (context.mentions contains the bot\n// number) and the message is not its own. The command is the first non-@ word.\nconst cfg = $('Config').first().json;\nconst BOT = String(cfg.botNumber || '').replace(/[^0-9]/g, '');\nconst body = $('WhatsApp Inbound').first().json.body || {};\nconst msg = (body.messages && body.messages[0]) || {};\nconst text = (msg.text && msg.text.body) ? String(msg.text.body).trim() : '';\nconst from = String(msg.from || '').replace(/[^0-9]/g, '');\nconst chatId = msg.chat_id || '';\nconst fromMe = msg.from_me === true;\nconst mentions = (msg.context && Array.isArray(msg.context.mentions)) ? msg.context.mentions.map(m => String(m).replace(/[^0-9]/g, '')) : [];\nconst isBot = fromMe || (BOT.length > 0 && from === BOT);\nconst mentioned = !isBot && BOT.length > 0 && mentions.includes(BOT);\nconst words = text.split(' ').filter(t => t && t.charAt(0) !== '@');\nconst command = mentioned ? (words[0] || '').toLowerCase() : '';\nconst targetPlayers = mentions.filter(m => m && m !== BOT);\nreturn [{ json: { mentioned, command, number: from, chatId, text, targetPlayers } }];"
       },
       "id": "wf1-parse",
       "name": "Parse Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-280, 300]
+      "position": [-656, 128]
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
           "conditions": [
-            { "id": "c1", "leftValue": "={{ $json.command }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty", "singleValue": true } }
+            { "id": "c1", "leftValue": "={{ $json.mentioned }}", "rightValue": "", "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "wf1-iscommand",
-      "name": "Is a command?",
+      "id": "wf1-ismention",
+      "name": "Bot mentioned?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [-80, 300]
+      "position": [-464, 128]
     },
     {
       "parameters": {
@@ -68,13 +69,34 @@
             {
               "conditions": {
                 "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-                "conditions": [
-                  { "id": "s1", "leftValue": "={{ $json.command }}", "rightValue": "/sign-in", "operator": { "type": "string", "operation": "equals" } }
-                ],
+                "conditions": [ { "id": "s1", "leftValue": "={{ $json.command }}", "rightValue": "sign-in", "operator": { "type": "string", "operation": "equals" } } ],
                 "combinator": "and"
               },
-              "renameOutput": true,
-              "outputKey": "sign-in"
+              "renameOutput": true, "outputKey": "sign-in"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+                "conditions": [ { "id": "s2", "leftValue": "={{ $json.command }}", "rightValue": "help", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "renameOutput": true, "outputKey": "help"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+                "conditions": [ { "id": "s3", "leftValue": "={{ $json.command }}", "rightValue": "start-tournament", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "renameOutput": true, "outputKey": "start-tournament"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+                "conditions": [ { "id": "s4", "leftValue": "={{ $json.command }}", "rightValue": "defeated", "operator": { "type": "string", "operation": "equals" } } ],
+                "combinator": "and"
+              },
+              "renameOutput": true, "outputKey": "defeated"
             }
           ]
         },
@@ -84,61 +106,92 @@
       "name": "Route Command",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [160, 280]
+      "position": [-240, 128]
     },
     {
       "parameters": {
         "operation": "get",
-        "dataTableId": { "__rl": true, "mode": "list", "value": "", "cachedResultName": "nickname_number_mapping" },
-        "filters": {
-          "conditions": [
-            { "keyName": "number", "condition": "eq", "keyValue": "={{ $json.number }}" }
-          ]
-        },
-        "options": {}
+        "dataTableId": { "__rl": true, "value": "8FGuvQ1TAYofF7F7", "mode": "list", "cachedResultName": "nickname_number_mapping", "cachedResultUrl": "/projects/ByzftX6HdGqx8b8x/datatables/8FGuvQ1TAYofF7F7" },
+        "filters": { "conditions": [ { "keyName": "number", "keyValue": "={{ $json.number }}" } ] }
       },
       "id": "wf1-datatable",
       "name": "Get Nickname (Data Table)",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1,
-      "position": [380, 180],
+      "position": [0, -80],
       "alwaysOutputData": true
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── /sign-in handler. Nickname comes from the nickname_number_mapping table. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst chatId = $('Parse Message').first().json.chatId;\nconst q = cfg.fbAuth || '';\n\n// The Data Table row (empty if the number is not mapped).\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message){ if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); } return [{ json:{ chatId, message } }]; }\n\nif(!nickname){ return await send.call(this, '⚠️ Your number is not registered for this tournament.'); }\n\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, '⚠️ There is no active tournament right now.'); }\n\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, '⚠️ \"'+nickname+'\" is not on the player list for '+tid+'.'); }\n\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+sanitizeKey(match)+'.json'+q, body: record, json:true });\nreturn await send.call(this, '✅ '+match+\" — you're signed in to \"+tid+'.');"
+        "jsCode": "// ── sign-in: nickname from the Data Table row → match roster → write participant ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId; const who = '@'+p.number+' ';\nconst q = cfg.fbAuth || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message){ if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); } return [{ json:{ chatId, message } }]; }\n\nif(!nickname){ return await send.call(this, who+'your number is not registered for this tournament.'); }\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, who+'there is no active tournament right now.'); }\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, who+'\"'+nickname+'\" is not on the player list for '+tid+'.'); }\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+sanitizeKey(match)+'.json'+q, body: record, json:true });\nreturn await send.call(this, who+'✅ '+match+' — you are signed in to '+tid+'.');"
       },
       "id": "wf1-signin",
-      "name": "Handle /sign-in",
+      "name": "Handle sign-in",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [600, 180]
+      "position": [220, -80]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── Default handler for any unrecognized /command. ──\nconst cfg = $('Config').first().json;\nconst chatId = $('Parse Message').first().json.chatId;\nconst message = 'Command not recognized.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); }\nreturn [{ json: { chatId, message } }];"
+        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Commands (tag me + the word):\\n• sign-in — join the current tournament\\n• help — show this help\\n• start-tournament — begin a tournament (coming soon)\\n• defeated @player — report that you beat @player';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
+      },
+      "id": "wf1-help",
+      "name": "Handle help",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── start-tournament: placeholder (to be implemented). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' start-tournament is coming soon.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'start-tournament' } }];"
+      },
+      "id": "wf1-start",
+      "name": "Handle start-tournament",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 280]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── defeated @player: needs a tagged opponent. Result recording comes with\n// start-tournament (placeholder reply for now). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst target = (p.targetPlayers && p.targetPlayers[0]) || '';\nlet message;\nif(!target){ message = '@'+p.number+' tag the player you defeated, e.g. \"@bot defeated @player\".'; }\nelse { message = '@'+p.number+' beat @'+target+' — result recording is coming soon.'; }\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'defeated', target } }];"
+      },
+      "id": "wf1-defeated",
+      "name": "Handle defeated",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 460]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── default: unrecognized command. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' command not recognized. Tag me with \"help\" to see the commands.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: p.chatId, body: message }, json:true }); }\nreturn [{ json:{ sent:'not_recognized' } }];"
       },
       "id": "wf1-unknown",
       "name": "Command Not Recognized",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [380, 400]
+      "position": [0, 640]
     }
   ],
   "connections": {
     "WhatsApp Inbound": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
     "Config": { "main": [[{ "node": "Parse Message", "type": "main", "index": 0 }]] },
-    "Parse Message": { "main": [[{ "node": "Is a command?", "type": "main", "index": 0 }]] },
-    "Is a command?": { "main": [[{ "node": "Route Command", "type": "main", "index": 0 }], []] },
+    "Parse Message": { "main": [[{ "node": "Bot mentioned?", "type": "main", "index": 0 }]] },
+    "Bot mentioned?": { "main": [[{ "node": "Route Command", "type": "main", "index": 0 }], []] },
     "Route Command": {
       "main": [
         [{ "node": "Get Nickname (Data Table)", "type": "main", "index": 0 }],
+        [{ "node": "Handle help", "type": "main", "index": 0 }],
+        [{ "node": "Handle start-tournament", "type": "main", "index": 0 }],
+        [{ "node": "Handle defeated", "type": "main", "index": 0 }],
         [{ "node": "Command Not Recognized", "type": "main", "index": 0 }]
       ]
     },
-    "Get Nickname (Data Table)": { "main": [[{ "node": "Handle /sign-in", "type": "main", "index": 0 }]] }
+    "Get Nickname (Data Table)": { "main": [[{ "node": "Handle sign-in", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

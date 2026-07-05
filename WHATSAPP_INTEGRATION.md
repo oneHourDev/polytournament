@@ -36,9 +36,12 @@ latest_tournament = "<tid>"                            # active-tournament point
 
 Adding a player is simply a **write** into Firebase. n8n does it directly:
 
-1. Group message `@bot /sign-in` hits the n8n **`whatsapp-inbound`** webhook.
-2. A **Switch** routes `/`-commands: `/sign-in` goes to its handler, anything
-   else replies "Command not recognized" (separate node). The `/sign-in` handler:
+1. A group message hits the n8n **`whatsapp-inbound`** webhook. The bot reacts
+   **only when it is @mentioned** (`messages[0].context.mentions` contains the
+   bot number) and never to its own messages. The command is the first plain word
+   after the mention: `sign-in`, `help`, `start-tournament`, `defeated @player`.
+2. A **Switch** routes each command to its own node; unknown words reply
+   "command not recognized". Replies tag the requester. The **`sign-in`** handler:
    - resolves sender phone → nickname via the **`nickname_number_mapping`** n8n
      Data Table (`number` → `nickname`) — the only place a phone number appears,
    - `GET latest_tournament` (falls back to highest-`order` tournament),
