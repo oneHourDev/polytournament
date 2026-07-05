@@ -1,18 +1,18 @@
 {
-  "name": "Polytournament – WhatsApp /sign-in (Whapi.Cloud + Firebase REST)",
+  "name": "Polytournament – WhatsApp commands (Whapi + Data Table + Firebase)",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "whatsapp-inbound",
-        "responseMode": "responseNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "id": "wf1-webhook",
       "name": "WhatsApp Inbound",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-420, 300],
+      "position": [-680, 300],
       "webhookId": "polytournament-whatsapp-inbound"
     },
     {
@@ -31,36 +31,114 @@
       "name": "Config",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [-200, 300]
+      "position": [-480, 300]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── Bot logic mirrored from n8n/lib/bot-logic.js (keep in sync) ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\nfunction helpText(msg){const C=[['/sign-in','Join the current tournament (identity from your phone number).'],['/create-tournament','Create a new tournament (coming soon).']];return (msg||'Available commands:')+'\\n'+C.map(c=>c[0]+' – '+c[1]).join('\\n');}\n\n// ── PII BOUNDARY: phone → nickname lives ONLY here. Replace with your lookup. ──\nconst DIRECTORY = {\n  // '420123456789': 'MorPet87',\n};\n\nconst cfg = $json;\n\n// Whapi.Cloud inbound payload: { messages: [ { from_me, from, chat_id, text:{body} } ] }\nconst payload = $('WhatsApp Inbound').first().json.body || {};\nconst msg = (payload.messages && payload.messages[0]) || {};\nconst text = (msg.text && msg.text.body) ? String(msg.text.body).trim() : '';\nconst from = String(msg.from || '');\nconst chatId = msg.chat_id || '';\nconst token = text.split(' ').filter(Boolean).find(t=>t.charAt(0)==='/') || '';\nconst command = token.toLowerCase();\n\nasync function send(message){\n  if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); }\n  return [{ json: { chatId, message } }];\n}\n\n// Ignore our own messages and anything that isn't a slash command.\nif(msg.from_me || !command){ return [{ json: { skipped: true } }]; }\nif(!(command==='/sign-in'||command==='/signin')){ return await send.call(this, helpText('Unknown command.')); }\n\n// Resolve nickname privately (never leaves this node).\nconst phone = from.replace(/[^0-9]/g,'');\nconst nickname = DIRECTORY[phone] || '';\n\nconst q = cfg.fbAuth || '';\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, '⚠️ There is no active tournament right now.'); }\n\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nif(!nickname){ return await send.call(this, '⚠️ Your number is not registered for this tournament.'); }\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, '⚠️ \"'+nickname+'\" is not on the player list for '+tid+'.'); }\n\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+sanitizeKey(match)+'.json'+q, body: record, json:true });\nreturn await send.call(this, '✅ '+match+\" — you're signed in to \"+tid+'.');"
+        "jsCode": "// Parse the Whapi inbound message. Emits command='' for our own messages\n// (from_me) and for non-command chatter, so the IF node ignores them.\nconst body = $('WhatsApp Inbound').first().json.body || {};\nconst msg = (body.messages && body.messages[0]) || {};\nconst text = (msg.text && msg.text.body) ? String(msg.text.body).trim() : '';\nconst number = String(msg.from || '').replace(/[^0-9]/g, '');\nconst chatId = msg.chat_id || '';\nconst fromMe = msg.from_me === true;\nconst token = text.split(' ').filter(Boolean).find(t => t.charAt(0) === '/') || '';\nconst command = fromMe ? '' : token.toLowerCase();\nreturn [{ json: { command, number, chatId, text } }];"
       },
-      "id": "wf1-handle",
-      "name": "Handle Sign-in (Whapi + Firebase)",
+      "id": "wf1-parse",
+      "name": "Parse Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [40, 300]
+      "position": [-280, 300]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            { "id": "c1", "leftValue": "={{ $json.command }}", "rightValue": "", "operator": { "type": "string", "operation": "notEmpty", "singleValue": true } }
+          ],
+          "combinator": "and"
+        },
         "options": {}
       },
-      "id": "wf1-respond",
-      "name": "Respond 200",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [300, 300]
+      "id": "wf1-iscommand",
+      "name": "Is a command?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-80, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
+                "conditions": [
+                  { "id": "s1", "leftValue": "={{ $json.command }}", "rightValue": "/sign-in", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sign-in"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "wf1-switch",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [160, 280]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": { "__rl": true, "mode": "list", "value": "", "cachedResultName": "nickname_number_mapping" },
+        "filters": {
+          "conditions": [
+            { "keyName": "number", "condition": "eq", "keyValue": "={{ $json.number }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wf1-datatable",
+      "name": "Get Nickname (Data Table)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [380, 180],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── /sign-in handler. Nickname comes from the nickname_number_mapping table. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst chatId = $('Parse Message').first().json.chatId;\nconst q = cfg.fbAuth || '';\n\n// The Data Table row (empty if the number is not mapped).\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message){ if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); } return [{ json:{ chatId, message } }]; }\n\nif(!nickname){ return await send.call(this, '⚠️ Your number is not registered for this tournament.'); }\n\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, '⚠️ There is no active tournament right now.'); }\n\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, '⚠️ \"'+nickname+'\" is not on the player list for '+tid+'.'); }\n\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+sanitizeKey(match)+'.json'+q, body: record, json:true });\nreturn await send.call(this, '✅ '+match+\" — you're signed in to \"+tid+'.');"
+      },
+      "id": "wf1-signin",
+      "name": "Handle /sign-in",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 180]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── Default handler for any unrecognized /command. ──\nconst cfg = $('Config').first().json;\nconst chatId = $('Parse Message').first().json.chatId;\nconst message = 'Command not recognized.';\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body:{ to: chatId, body: message }, json:true }); }\nreturn [{ json: { chatId, message } }];"
+      },
+      "id": "wf1-unknown",
+      "name": "Command Not Recognized",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [380, 400]
     }
   ],
   "connections": {
     "WhatsApp Inbound": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
-    "Config": { "main": [[{ "node": "Handle Sign-in (Whapi + Firebase)", "type": "main", "index": 0 }]] },
-    "Handle Sign-in (Whapi + Firebase)": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] }
+    "Config": { "main": [[{ "node": "Parse Message", "type": "main", "index": 0 }]] },
+    "Parse Message": { "main": [[{ "node": "Is a command?", "type": "main", "index": 0 }]] },
+    "Is a command?": { "main": [[{ "node": "Route Command", "type": "main", "index": 0 }], []] },
+    "Route Command": {
+      "main": [
+        [{ "node": "Get Nickname (Data Table)", "type": "main", "index": 0 }],
+        [{ "node": "Command Not Recognized", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Nickname (Data Table)": { "main": [[{ "node": "Handle /sign-in", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

@@ -37,13 +37,15 @@ latest_tournament = "<tid>"                            # active-tournament point
 Adding a player is simply a **write** into Firebase. n8n does it directly:
 
 1. Group message `@bot /sign-in` hits the n8n **`whatsapp-inbound`** webhook.
-2. The **`Handle Sign-in`** Code node:
-   - resolves sender phone → nickname (private `DIRECTORY` map — the only PII spot),
+2. A **Switch** routes `/`-commands: `/sign-in` goes to its handler, anything
+   else replies "Command not recognized" (separate node). The `/sign-in` handler:
+   - resolves sender phone → nickname via the **`nickname_number_mapping`** n8n
+     Data Table (`number` → `nickname`) — the only place a phone number appears,
    - `GET latest_tournament` (falls back to highest-`order` tournament),
    - `GET tournaments/<tid>/players`,
    - matches the nickname (**case-insensitive + trimmed**),
    - on match: `PUT tournaments/<tid>/participants/<Nickname>`,
-   - replies in the group (✅ / ⚠️ not recognized / help for unknown commands).
+   - replies in the group (✅ / ⚠️ not recognized / not registered).
 
 No repo endpoint, no shared secret exposed anywhere. The frontend shows a ✓ badge
 for signed-in players (it reads `participants` with the normal tournaments read).
@@ -79,8 +81,8 @@ truth): `resolveSignIn`, `matchRoster`, `pickLatestTid`, `selectAnnouncements`,
 2. **Set up Whapi.Cloud + import the workflows** — follow
    [`n8n/README.md`](n8n/README.md): create a Whapi channel, scan the QR to link
    the bot number, point Whapi's inbound webhook at n8n's `/webhook/whatsapp-inbound`,
-   set the env vars (below), and put your real phone→nickname map in the
-   `Handle Sign-in` node.
+   set the Variables (below), create the `nickname_number_mapping` Data Table
+   (`number`, `nickname`), and select it in the `Get Nickname` node.
 3. Activate both workflows.
 
 ### n8n Variables — Settings → Variables (all secrets stay here)

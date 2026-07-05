@@ -6,7 +6,7 @@ Firebase's **REST API**. No Cloud Functions, no Blaze. All secrets live in n8n.
 
 | File | Trigger | What it does |
 |------|---------|--------------|
-| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | Resolves phone→nickname **privately**, matches the roster, **writes** `participants/<Nickname>` to Firebase, replies in the group via Whapi. |
+| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | Routes `/`-commands: `/sign-in` looks up the nickname in the `nickname_number_mapping` Data Table, matches the roster, **writes** `participants/<Nickname>`, and replies; any other command replies "Command not recognized". |
 | `score-announcement.workflow.json` | Schedule (every minute) | Polls the active tournament's `scores`, announces any with a winner and `notified != true` via Whapi, then marks them `notified: true`. |
 
 Built from **core nodes only** (Webhook, Schedule, Set, Code, Respond). Firebase
@@ -49,19 +49,33 @@ read config from **n8n Variables** (`$vars`). Add each one under
 > into the **Config** node fields, or store the Whapi token as an HTTP **Header
 > Auth credential** instead.
 
-## The PII boundary (important)
+## Phone→nickname mapping (n8n Data Table)
 
-Phone numbers exist **only** in the `Handle Sign-in` Code node's `DIRECTORY` map
-(`{ '<digits-only phone>': '<nickname>' }`). Whapi delivers the sender as
-`messages[0].from`; the node strips it to digits and looks up the nickname there.
-Everything written to Firebase and everything the frontend sees is nicknames only.
+The mapping lives in an n8n **Data Table** called **`nickname_number_mapping`**
+with two columns: **`number`** (sender's phone, digits only, international, no `+`)
+and **`nickname`**. Phone numbers stay inside n8n; only the nickname flows onward,
+so Firebase and the frontend still see nicknames only.
 
-## How the trigger works
+After importing, open the **`Get Nickname (Data Table)`** node and:
+1. Select your **`nickname_number_mapping`** table in the *Data Table* dropdown.
+2. Confirm the operation is **Get Row(s)** with the filter **`number` equals
+   `{{ $json.number }}`** (the digits parsed from the inbound message).
 
-The sign-in node reads Whapi's inbound `messages[0]`, ignores the bot's own
-messages (`from_me`), and acts on any message containing a **slash command**
-(`/sign-in`). (WhatsApp @mentions just tag the bot's number; if you want to
-require an explicit mention, add a check for your bot number in `text`.)
+Add a row per player, e.g. `number = 420123456789`, `nickname = MorPet87`.
+
+## Command routing (separate nodes)
+
+```
+Webhook → Config → Parse Message → Is a command? ─true→ Route Command ┬ /sign-in → Get Nickname → Handle /sign-in
+                                        └false→ (ignored)             └ (default) → Command Not Recognized
+```
+
+- **Parse Message** ignores the bot's own messages (`from_me`) and anything that
+  isn't a `/command`.
+- **Route Command** (Switch) sends `/sign-in` to its handler; **any other
+  command** falls through to the **Command Not Recognized** node, which replies
+  "Command not recognized." Add more commands as extra Switch outputs + handler
+  nodes later.
 
 ## How announcements work (no push, no Blaze)
 
