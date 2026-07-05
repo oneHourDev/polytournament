@@ -88,8 +88,12 @@ Webhook → Config → Parse Message → Bot mentioned? ─true→ Route Command
 | `sign-in` | Handle sign-in | ✅ implemented (Data Table → roster → participant) |
 | `help` | Handle help | ✅ lists all commands, tags requester |
 | `start-tournament` | Handle start-tournament | 🚧 placeholder ("coming soon") |
-| `defeated @player` | Handle defeated | 🚧 parses the tagged opponent; result recording TBD |
+| `defeated @player` | Get Opponent (Data Table) → Handle defeated | 🚧 resolves the tagged opponent's number → nickname; result recording TBD |
 | *(anything else)* | Command Not Recognized | ✅ "command not recognized" |
+
+**Mentions:** Whapi only tags a person if the send request includes **both** the
+`@<number>` in the body **and** a `mentions: ["<number>", …]` array. Every reply
+node does this (tagging the requester, and the opponent for `defeated`).
 
 ## How announcements work (no push, no Blaze)
 
