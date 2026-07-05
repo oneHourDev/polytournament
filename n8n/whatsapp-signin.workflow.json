@@ -1,5 +1,5 @@
 {
-  "name": "Polytournament – WhatsApp /sign-in",
+  "name": "Polytournament – WhatsApp /sign-in (REST, no Cloud Functions)",
   "nodes": [
     {
       "parameters": {
@@ -12,99 +12,36 @@
       "name": "WhatsApp Inbound",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-360, 300],
+      "position": [-420, 300],
       "webhookId": "polytournament-whatsapp-inbound"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// Adapt these field paths to YOUR WhatsApp provider's inbound schema.\nconst body = $json.body || $json;\nconst text = String(body.text || body.message || body.caption || '').trim();\nconst from = body.from || body.sender || body.author || '';\nconst chatId = body.chatId || body.groupId || body.chat || '';\nconst lower = text.toLowerCase();\nconst mentionedBot = lower.includes('@bot') || body.mentionedBot === true;\nconst parts = text.replace(/@bot/ig, ' ').split(' ').filter(Boolean);\nconst token = parts.find(t => t.charAt(0) === '/');\nconst command = token ? token.toLowerCase() : '';\nconst isCommand = mentionedBot && command.length > 0;\nreturn [{ json: { isCommand, command, from, chatId, rawText: text } }];"
-      },
-      "id": "wf1-parse",
-      "name": "Parse Command",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [-140, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
-          "conditions": [
-            {
-              "id": "wf1-cond-iscmd",
-              "leftValue": "={{ $json.isCommand }}",
-              "rightValue": "",
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "wf1-if",
-      "name": "Only Bot Commands",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [80, 300]
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "// ⚠ PRIVATE PII BOUNDARY — phone numbers live ONLY in this node.\n// Nothing downstream (this repo, Firebase, the frontend) ever receives a phone.\n// Replace this static map with a private lookup (n8n data store / DB / HTTP).\nconst DIRECTORY = {\n  // '<digits-only E.164 phone>': '<nickname>',\n  // '420123456789': 'MorPet87',\n};\nconst phone = String($json.from || '').replace(/[^0-9]/g, '');\nconst nickname = DIRECTORY[phone] || '';\nreturn [{ json: { command: $json.command, chatId: $json.chatId, nickname, known: nickname.length > 0 } }];"
-      },
-      "id": "wf1-resolve",
-      "name": "Resolve Nickname",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [300, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.CF_BOTCOMMAND_URL }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            { "name": "x-webhook-secret", "value": "={{ $env.N8N_SHARED_SECRET }}" }
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "fbUrl", "value": "={{ $env.FIREBASE_DB_URL }}", "type": "string" },
+            { "id": "a2", "name": "fbAuth", "value": "={{ $env.FIREBASE_AUTH_QS || '' }}", "type": "string" },
+            { "id": "a3", "name": "waSendUrl", "value": "={{ $env.WA_SEND_URL }}", "type": "string" }
           ]
         },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ command: $json.command, nickname: $json.nickname }) }}",
-        "options": { "response": { "response": { "neverError": true } } }
+        "options": {}
       },
-      "id": "wf1-call",
-      "name": "Call botCommand",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [520, 200]
+      "id": "wf1-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-200, 300]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Turn the botCommand JSON response into a WhatsApp message.\nconst r = ($json.body) ? $json.body : $json;\nlet message;\nif (r.ok) {\n  message = `✅ ${r.nickname} signed in to ${r.tournament_id}.`;\n} else if (r.help) {\n  message = 'Available commands:\\n' + (r.commands || []).map(c => `${c.name} – ${c.description}`).join('\\n');\n} else if (r.error === 'not_recognized') {\n  message = `⚠️ ${r.message}`;\n} else if (r.error === 'missing_nickname') {\n  message = '⚠️ Your number is not registered for this tournament.';\n} else {\n  message = `⚠️ ${r.message || r.error || 'Something went wrong.'}`;\n}\nconst chatId = $('Resolve Nickname').first().json.chatId;\nreturn [{ json: { chatId, message } }];"
+        "jsCode": "// ── Bot logic mirrored from n8n/lib/bot-logic.js (keep in sync) ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\nfunction helpText(msg){const C=[['/sign-in','Join the current tournament (identity from your phone number).'],['/create-tournament','Create a new tournament (coming soon).']];return (msg||'Available commands:')+'\\n'+C.map(c=>c[0]+' – '+c[1]).join('\\n');}\n\n// ── PII BOUNDARY: phone → nickname lives ONLY here. Replace with your lookup. ──\nconst DIRECTORY = {\n  // '420123456789': 'MorPet87',\n};\n\nconst cfg = $json;\nconst body = $('WhatsApp Inbound').first().json.body || {};\nconst text = String(body.text || body.message || body.caption || '').trim();\nconst from = String(body.from || body.sender || body.author || '');\nconst chatId = body.chatId || body.groupId || body.chat || '';\nconst lower = text.toLowerCase();\nconst mentioned = lower.includes('@bot') || body.mentionedBot === true;\nconst token = text.replace(/@bot/ig,' ').split(' ').filter(Boolean).find(t=>t.charAt(0)==='/') || '';\nconst command = token.toLowerCase();\n\nasync function send(message){\n  if(cfg.waSendUrl){ await this.helpers.httpRequest({method:'POST',url:cfg.waSendUrl,body:{chatId,text:message},json:true}); }\n  return [{ json: { chatId, message } }];\n}\n\nif(!mentioned || !command){ return [{ json: { chatId, message: '', skipped: true } }]; }\nif(!(command==='/sign-in'||command==='/signin')){ return await send.call(this, helpText('Unknown command.')); }\n\n// Resolve nickname privately.\nconst phone = from.replace(/[^0-9]/g,'');\nconst nickname = DIRECTORY[phone] || '';\n\nconst q = cfg.fbAuth || '';\nconst pointer = await this.helpers.httpRequest({url: cfg.fbUrl+'/latest_tournament.json'+q, json:true}).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments.json'+q, json:true}).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, '⚠️ There is no active tournament right now.'); }\n\nconst players = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true}).catch(()=>[]);\nif(!nickname){ return await send.call(this, '⚠️ Your number is not registered for this tournament.'); }\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, '⚠️ \"'+nickname+'\" is not on the player list for '+tid+'.'); }\n\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+sanitizeKey(match)+'.json'+q, body: record, json:true});\nreturn await send.call(this, '✅ '+match+\" — you're signed in to \"+tid+'.');"
       },
-      "id": "wf1-format",
-      "name": "Format Reply",
+      "id": "wf1-handle",
+      "name": "Handle Sign-in (Firebase REST)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [740, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.WA_SEND_URL }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chatId: $json.chatId, text: $json.message }) }}",
-        "options": {}
-      },
-      "id": "wf1-send",
-      "name": "Send WhatsApp Reply",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [960, 200]
+      "position": [40, 300]
     },
     {
       "parameters": {
@@ -112,37 +49,17 @@
         "responseBody": "={{ JSON.stringify({ ok: true }) }}",
         "options": {}
       },
-      "id": "wf1-respond-ok",
+      "id": "wf1-respond",
       "name": "Respond 200",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1180, 200]
-    },
-    {
-      "parameters": {
-        "respondWith": "noData",
-        "options": {}
-      },
-      "id": "wf1-respond-ignore",
-      "name": "Ignore (Respond 200)",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [300, 420]
+      "position": [300, 300]
     }
   ],
   "connections": {
-    "WhatsApp Inbound": { "main": [[{ "node": "Parse Command", "type": "main", "index": 0 }]] },
-    "Parse Command": { "main": [[{ "node": "Only Bot Commands", "type": "main", "index": 0 }]] },
-    "Only Bot Commands": {
-      "main": [
-        [{ "node": "Resolve Nickname", "type": "main", "index": 0 }],
-        [{ "node": "Ignore (Respond 200)", "type": "main", "index": 0 }]
-      ]
-    },
-    "Resolve Nickname": { "main": [[{ "node": "Call botCommand", "type": "main", "index": 0 }]] },
-    "Call botCommand": { "main": [[{ "node": "Format Reply", "type": "main", "index": 0 }]] },
-    "Format Reply": { "main": [[{ "node": "Send WhatsApp Reply", "type": "main", "index": 0 }]] },
-    "Send WhatsApp Reply": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] }
+    "WhatsApp Inbound": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Handle Sign-in (Firebase REST)", "type": "main", "index": 0 }]] },
+    "Handle Sign-in (Firebase REST)": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

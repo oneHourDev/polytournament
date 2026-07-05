@@ -1,8 +1,5 @@
 {
   "database": {
     "rules": "firebase-rules.json"
-  },
-  "functions": {
-    "source": "functions"
   }
 }

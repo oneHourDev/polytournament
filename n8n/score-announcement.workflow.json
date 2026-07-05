@@ -1,103 +1,49 @@
 {
-  "name": "Polytournament – Score Announcement",
+  "name": "Polytournament – Score Announcements (poll, no Cloud Functions)",
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "score-announcement",
-        "responseMode": "responseNode",
-        "options": {}
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] }
       },
-      "id": "wf2-webhook",
-      "name": "Score Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [-360, 300],
-      "webhookId": "polytournament-score-announcement"
+      "id": "wf2-cron",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-420, 300]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict", "version": 2 },
-          "conditions": [
-            {
-              "id": "wf2-cond-secret",
-              "leftValue": "={{ $json.headers['x-webhook-secret'] }}",
-              "rightValue": "={{ $env.N8N_SHARED_SECRET }}",
-              "operator": { "type": "string", "operation": "equals" }
-            }
-          ],
-          "combinator": "and"
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "fbUrl", "value": "={{ $env.FIREBASE_DB_URL }}", "type": "string" },
+            { "id": "a2", "name": "fbAuth", "value": "={{ $env.FIREBASE_AUTH_QS || '' }}", "type": "string" },
+            { "id": "a3", "name": "waSendUrl", "value": "={{ $env.WA_SEND_URL }}", "type": "string" },
+            { "id": "a4", "name": "waGroupId", "value": "={{ $env.WA_GROUP_ID }}", "type": "string" }
+          ]
         },
         "options": {}
       },
-      "id": "wf2-auth",
-      "name": "Verify Shared Secret",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [-140, 300]
+      "id": "wf2-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-200, 300]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Build the group message from the Cloud Function payload (nicknames only).\nconst p = $json.body || {};\nconst score = p.result ? ` (${p.result})` : '';\nconst message = `🏆 ${p.winner_nickname} beat ${p.loser_nickname} in ${p.tournament_title}${score}.`;\nreturn [{ json: { message } }];"
+        "jsCode": "// ── Bot logic mirrored from n8n/lib/bot-logic.js (keep in sync) ──\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction selectAnnouncements(scores){return Object.entries(scores||{}).filter(([,s])=>s&&s.winner_nickname&&s.notified!==true).map(([matchId,s])=>Object.assign({matchId},s));}\nfunction announcementText(s,title){const t=title||s.tournament_id||'the tournament';const suf=s.result?' ('+s.result+')':'';return '🏆 '+s.winner_nickname+' beat '+s.loser_nickname+' in '+t+suf+'.';}\n\nconst cfg = $json;\nconst q = cfg.fbAuth || '';\n\n// Poll the active tournament's scores.\nlet tid = await this.helpers.httpRequest({url: cfg.fbUrl+'/latest_tournament.json'+q, json:true}).catch(()=>null);\nif(!(tid && typeof tid==='string')){ const reg = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments.json'+q, json:true}).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return [{ json: { announced: 0, note: 'no active tournament' } }]; }\n\nconst title = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true}).catch(()=>tid);\nconst scores = await this.helpers.httpRequest({url: cfg.fbUrl+'/tournaments/'+tid+'/scores.json'+q, json:true}).catch(()=>({}));\nconst pending = selectAnnouncements(scores);\n\nlet announced = 0;\nfor(const s of pending){\n  const message = announcementText(s, title);\n  if(cfg.waSendUrl){ await this.helpers.httpRequest({method:'POST', url: cfg.waSendUrl, body:{ chatId: cfg.waGroupId, text: message }, json:true}); }\n  // Mark notified so it is not announced again (corrections reset it to false).\n  await this.helpers.httpRequest({method:'PATCH', url: cfg.fbUrl+'/tournaments/'+tid+'/scores/'+s.matchId+'.json'+q, body:{ notified: true }, json:true});\n  announced++;\n}\nreturn [{ json: { tid, announced } }];"
       },
-      "id": "wf2-format",
-      "name": "Format Announcement",
+      "id": "wf2-poll",
+      "name": "Poll & Announce (Firebase REST)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [120, 200]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.WA_SEND_URL }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chatId: $env.WA_GROUP_ID, text: $json.message }) }}",
-        "options": {}
-      },
-      "id": "wf2-send",
-      "name": "Send WhatsApp Group",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [340, 200]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
-        "options": {}
-      },
-      "id": "wf2-respond-ok",
-      "name": "Respond 200",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [560, 200]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ ok: false, error: 'unauthorized' }) }}",
-        "options": { "responseCode": 401 }
-      },
-      "id": "wf2-respond-401",
-      "name": "Respond 401",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [120, 420]
+      "position": [40, 300]
     }
   ],
   "connections": {
-    "Score Webhook": { "main": [[{ "node": "Verify Shared Secret", "type": "main", "index": 0 }]] },
-    "Verify Shared Secret": {
-      "main": [
-        [{ "node": "Format Announcement", "type": "main", "index": 0 }],
-        [{ "node": "Respond 401", "type": "main", "index": 0 }]
-      ]
-    },
-    "Format Announcement": { "main": [[{ "node": "Send WhatsApp Group", "type": "main", "index": 0 }]] },
-    "Send WhatsApp Group": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] }
+    "Every minute": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Poll & Announce (Firebase REST)", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

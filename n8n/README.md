@@ -1,64 +1,57 @@
-# n8n workflows
+# n8n workflows (no Cloud Functions / no Blaze)
 
-Two importable workflows that connect a WhatsApp group to the tournament tracker.
-They are built from **n8n core nodes only** (Webhook, Code, IF, HTTP Request,
-Respond to Webhook) so they import into any n8n instance without community nodes.
+Two importable workflows connect a WhatsApp group to the tournament tracker,
+talking to Firebase over its **REST API**. No Cloud Functions, no Blaze — the
+free Spark plan is enough. All secrets live in n8n.
 
-| File | Direction | Purpose |
-|------|-----------|---------|
-| `whatsapp-signin.workflow.json` | WhatsApp → repo | Handles `@bot /sign-in`, resolves phone→nickname **privately**, calls the `botCommand` Cloud Function, replies in the group. |
-| `score-announcement.workflow.json` | repo → WhatsApp | Receives the score webhook from the `onScoreWrite` Cloud Function and posts the result to the group. |
+| File | Trigger | What it does |
+|------|---------|--------------|
+| `whatsapp-signin.workflow.json` | Webhook (WhatsApp inbound) | Resolves phone→nickname **privately**, matches the roster, and **writes** `participants/<Nickname>` to Firebase, then replies in the group. |
+| `score-announcement.workflow.json` | Schedule (every minute) | Polls the active tournament's `scores`, announces any with a winner and `notified != true`, then marks them `notified: true`. |
+
+Both are built from **core nodes only** (Webhook, Schedule, Set, Code, Respond),
+so they import into any n8n without community nodes. Firebase reads/writes and
+the WhatsApp send are done with `this.helpers.httpRequest` inside the Code nodes.
 
 ## Import
 
-n8n → **Workflows** → **Import from File** → select each `*.workflow.json`.
-They import **inactive**; review, wire your provider (below), then activate.
+n8n → **Workflows** → **Import from File** → each `*.workflow.json`. They import
+**inactive**; set the variables, wire your provider, then activate.
 
-## Environment variables (n8n → Settings → Variables, or host env)
+## Environment variables (all secrets stay here)
 
 | Var | Used by | Value |
 |-----|---------|-------|
-| `CF_BOTCOMMAND_URL` | sign-in | The deployed `botCommand` URL, e.g. `https://<region>-polytournament-87d5b.cloudfunctions.net/botCommand` |
-| `N8N_SHARED_SECRET` | both | The **same** shared secret you set in `functions:config:set n8n.secret=...` |
-| `WA_SEND_URL` | both | Your WhatsApp provider's "send message" endpoint |
-| `WA_GROUP_ID` | announcements | The target group chat id |
+| `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
+| `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you lock down the DB; leave empty otherwise |
+| `WA_SEND_URL` | both | Your WhatsApp provider's send-message endpoint |
+| `WA_GROUP_ID` | announcements | Target group chat id |
 
 ## The PII boundary (important)
 
-Phone numbers exist **only** in the sign-in workflow's **`Resolve Nickname`**
-Code node. Replace its placeholder `DIRECTORY` map with a private lookup (n8n
-data store, a DB, or an HTTP call). Everything it sends onward — and everything
-this repo/Firebase stores — is nicknames only.
+Phone numbers exist **only** in the `Handle Sign-in` Code node's `DIRECTORY` map.
+Replace the placeholder with your private lookup (hard-coded map, an n8n data
+store, or an HTTP call to your own directory). Everything it writes to Firebase —
+and everything the repo/frontend sees — is nicknames only.
 
 ## Provider wiring (the two spots to adapt)
 
-These workflows are provider-agnostic. Adapt to WAHA / Evolution API / Twilio /
-Meta Cloud API at exactly two places:
+1. **Inbound** (sign-in): point your WhatsApp provider's incoming-message webhook
+   at `POST https://<your-n8n>/webhook/whatsapp-inbound`, then adjust the field
+   paths in `Handle Sign-in` (`body.text`, `body.from`, `body.chatId`) to match
+   your provider's payload.
+2. **Outbound** (both): the Code nodes POST `{ chatId, text }` to `WA_SEND_URL`.
+   Adjust that body to your provider's send API if different.
 
-1. **Inbound** (sign-in): point your provider's incoming-message webhook at
-   `POST https://<your-n8n>/webhook/whatsapp-inbound`. Then adjust the field
-   paths in the **`Parse Command`** node (`text`, `from`, `chatId`) to match your
-   provider's payload.
-2. **Outbound** (both): the **`Send WhatsApp …`** HTTP Request nodes POST
-   `{ chatId, text }` to `WA_SEND_URL`. Adjust the body shape to your provider's
-   send API if different.
+## How announcements work (no push needed)
 
-## Connect the Cloud Function to workflow 2
+The web app already writes each result to `tournaments/<tid>/scores/<matchId>`
+with `notified: false`. The schedule workflow polls, sends, and flips `notified`
+to `true`. A correction rewrites the doc with `notified:false`, so it
+re-announces on the next tick. Tune the interval on the **Every minute** node.
 
-Set the function's webhook target to this workflow's URL:
+## Keep logic in sync
 
-```bash
-firebase functions:config:set n8n.webhook_url="https://<your-n8n>/webhook/score-announcement"
-```
-
-The function sends `x-webhook-secret`; workflow 2's **Verify Shared Secret** node
-rejects anything that doesn't match `N8N_SHARED_SECRET` (401).
-
-## Payload contract
-
-The inbound side of workflow 2 expects exactly the payload documented in
-[`../WHATSAPP_INTEGRATION.md`](../WHATSAPP_INTEGRATION.md) ("Webhook payload contract").
-
-> Node `typeVersion`s target n8n ~1.x core nodes. If your n8n is older/newer and
-> a node imports with a version warning, open it and re-save — the parameters are
-> standard.
+The Code nodes mirror **`../n8n/lib/bot-logic.js`**, which is unit-tested
+(`npm test`). If you change matching or announcement rules, change both. Test the
+sign-in flow end-to-end against live Firebase with `node scripts/bot-cli.mjs`.
