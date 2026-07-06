@@ -1,16 +1,50 @@
-# n8n workflows (Whapi.Cloud + Firebase REST, no Cloud Functions)
+# WhatsApp bot + announcements (n8n · Whapi.Cloud · Firebase REST)
 
-Two importable workflows connect a WhatsApp group to the tournament tracker via
-**Whapi.Cloud** (a hosted WhatsApp gateway — no infrastructure to run) and
-Firebase's **REST API**. No Cloud Functions, no Blaze. All secrets live in n8n.
+Two importable n8n workflows connect a WhatsApp group to the tournament tracker
+via **Whapi.Cloud** (a hosted WhatsApp gateway — no infrastructure to run) and
+Firebase's **REST API**. No Cloud Functions, no Blaze — everything runs on the
+free Spark plan, and **all secrets live in n8n**.
+
+```
+WhatsApp group ⇄ Whapi.Cloud ⇄ n8n (private) ──REST──▶ Firebase RTDB ◀── frontend
+   (bot number,    (hosted        │                       ▲
+    scan QR)        gateway)      │  nicknames only        │  reads players + results
+                phone → nickname  │                        │  writes scores (notified:false)
+                resolved here — ALL secrets in n8n
+```
+
+> **No PII in the repo, Firebase, or the frontend.** Phone numbers live **only**
+> inside n8n (the `nickname_number_mapping` Data Table). Everything downstream —
+> Firebase, the frontend, this repo — stores/transmits **nicknames only**.
 
 | File | Trigger | What it does |
 |------|---------|--------------|
-| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | An **AI node (Claude Haiku)** classifies the @mention into an intent (`sign_in` / `report_win` / `help` / `start_tournament`, else `unknown`); the sign-in handler resolves the sender's nickname via the `nickname_number_mapping` Data Table and **appends it to the tournament's `players` list** (the single list the board renders), and replies. Unknown → a friendly "try rephrasing". |
+| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | An **AI node (Claude Haiku)** classifies the @mention into an intent (`sign_in` / `report_win` / `help` / `start_tournament`, else `unknown`) and routes it to a handler (see below). Unknown → a funny AI roast reply. |
 | `score-announcement.workflow.json` | Schedule (every minute) | Polls the active tournament's `scores`, announces any with a winner and `notified != true` via Whapi, then marks them `notified: true`. |
 
-Built from **core nodes only** (Webhook, Schedule, Set, Code, Respond). Firebase
-reads/writes and Whapi sends use `this.helpers.httpRequest` inside the Code nodes.
+Built from **core nodes only** (Webhook, Schedule, Set, Code, Switch, If). Firebase
+reads/writes and Whapi calls use `this.helpers.httpRequest` inside the Code nodes.
+
+## Data model (Firebase RTDB)
+
+```
+tournaments/<tid>/
+  order, title, legacy:false
+  setup{ style ("might"|"glory"), gloryTier?, mapType, mapSize, nation,
+         botCount?, botDifficulty? }        # gloryTier if glory; botDifficulty if botCount>0
+  players:[ "Nick1", … ]     # THE player list: who is in the tournament. Sign-in
+                             # appends to it; also hand-editable. The board renders
+                             # it. Result keys index into it (append-only = stable).
+  results/<a>-<b>          = "1:0"           # positional (players index); drives ranking
+  scores/<a>-<b>           = { winner_nickname, loser_nickname, result,
+                               notified:false, created_at, … }  # app OR bot report_win
+latest_tournament = "<tid>"                  # active pointer; sign-in/report/create target it
+```
+
+Avatars aren't stored — the frontend derives each from the nickname as
+`resources/img/<nickname>.jpeg` (falls back to initials). Adding a tournament is
+just one child under `tournaments`; the bot's `start_tournament` does exactly that
+(or hand-edit it in the Firebase console).
 
 ## 1. Whapi.Cloud setup (links your bot number)
 
@@ -92,8 +126,8 @@ Webhook → Config → Parse Message → Bot mentioned? ─true→ AI Classify (
   `ANTHROPIC_API_KEY` is unset, the node degrades to the deterministic
   `classifyIntent` keyword matcher (mirrored from `lib/bot-logic.js`).
 - **Route Command** (Switch) routes on `intent`; `unknown` (and anything
-  unmatched) falls through to **Command Not Recognized**, which asks the user to
-  rephrase. Replies tag the requester (`@<sender>`).
+  unmatched) falls through to **AI Chat (Claude)** — a playful roast reply.
+  Replies tag the requester (`@<sender>`).
 
 | Intent | Example phrasings | Node | Status |
 |--------|-------------------|------|--------|
@@ -167,3 +201,15 @@ the classifier (`normalizeIntent` / `classifyIntent` / `intentCatalog`), sign-in
 ranking (`currentLeaders` / `validateNewTournament` / `nextTournamentId` /
 `buildTournamentEntry`). Test the sign-in decision logic against live Firebase
 with `node scripts/bot-cli.mjs /sign-in <nickname>`.
+
+## Security
+
+- **No secrets in the frontend or the repo.** All credentials (Whapi token,
+  Anthropic key, optional Firebase auth token) live in n8n Variables.
+- **Phone numbers never leave n8n** — the Data Table maps `number → nickname`;
+  only nicknames flow to Firebase and the frontend. The roast chat sends recent
+  group **messages** (with display names, not numbers) to Anthropic for context.
+- The RTDB currently has no auth (pre-existing posture), so `tournaments` /
+  `latest_tournament` are publicly writable. To lock it down later, add Firebase
+  auth and set `FIREBASE_AUTH_QS` in n8n; restrict public writes on `players` and
+  `scores.notified` to the token n8n uses.

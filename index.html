@@ -73,8 +73,9 @@
 // legacy:true and point to their own indexN.html page. Dynamic tournaments
 // (5+) carry a full `setup` + `players` config and render here via #t=<id>.
 //
-// To add a new tournament: add an entry to the "tournaments" node in Firebase
-// (see HOW_TO_ADD_TOURNAMENT.md). No code changes, no new files.
+// To add a new tournament: the bot's start_tournament command adds an entry to
+// the "tournaments" node (or hand-edit it in the Firebase console). The registry
+// shape is documented in n8n/README.md. No code changes, no new files.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const FIREBASE_CONFIG = {

@@ -124,14 +124,6 @@ h1 {
   display: inline-block;
   letter-spacing: 0.05em;
 }
-.signed-in {
-  display: inline-block;
-  margin-left: 0.35em;
-  color: #7be89a;
-  font-weight: 700;
-  font-size: 0.85em;
-  vertical-align: middle;
-}
 .hub-empty {
   margin: 4rem auto;
   max-width: 640px;

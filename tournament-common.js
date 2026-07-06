@@ -571,11 +571,6 @@ function setPlayers(players) {
 
 // ─── DYNAMIC HUB (Tournament 2.0) ──────────────────────────────────────────
 
-// Case-insensitive, whitespace-trimmed nickname key (mirrors n8n/lib/bot-logic).
-function normalizeNick(s) {
-  return String(s == null ? '' : s).trim().toLowerCase();
-}
-
 // Registry caching: keep the last good registry in localStorage so the hub can
 // still render tournaments if a later Firebase read fails (offline / rules).
 const REGISTRY_CACHE_KEY = 'polytournament-registry';
