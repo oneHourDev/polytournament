@@ -74,17 +74,19 @@ read config from **n8n Variables** (`$vars`). Add each one under
 | Variable | Used by | Value |
 |----------|---------|-------|
 | `WHAPI_TOKEN` | both | Your Whapi channel Bearer token |
-| `WHAPI_BASE` | both | *(optional)* defaults to `https://gate.whapi.cloud` |
 | `WA_GROUP_ID` | announcements | Target group id (`...@g.us`) |
-| `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
-| `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you lock down the DB |
+| `FIREBASE_AUTH_QS` | both | *(optional)* only if you lock down the DB. Accepts a bare token (`abc123`) or a full `?auth=abc123` — the Config normalizes it. Leave empty for the public DB. |
 | `ANTHROPIC_API_KEY` | classify / create / chat | Anthropic API key for intent classification, tournament-setup extraction, and the roast chat. If unset, classification falls back to keywords and chat replies a canned line. |
 | `ANTHROPIC_MODEL` | classify / create / chat | *(optional)* defaults to `claude-haiku-4-5-20251001` |
-| `HUB_BASE_URL` | create | *(optional)* base URL of the hub for the tournament link; defaults to `https://polytournament-87d5b.web.app` (→ `<base>/#t=<id>`) |
+| `HUB_BASE_URL` | create | *(optional)* base URL of the hub for the tournament link; defaults to `https://onehourdev.github.io/polytournament` (→ `<base>/#t=<id>`) |
 
-> If your n8n plan doesn't include Variables, either paste the values directly
-> into the **Config** node fields, or store the Whapi token as an HTTP **Header
-> Auth credential** instead.
+The **Firebase DB URL** and the **Whapi base URL** (`https://gate.whapi.cloud`)
+are hardcoded in each workflow's **Config** node — no variable needed. If you fork
+this for another project, edit them there.
+
+> If your n8n plan doesn't include Variables, either paste the remaining values
+> directly into the **Config** node fields, or store the Whapi token as an HTTP
+> **Header Auth credential** instead.
 
 ## Phone→nickname mapping (n8n Data Table)
 

@@ -15,9 +15,9 @@
       "parameters": {
         "assignments": {
           "assignments": [
-            { "id": "a1", "name": "fbUrl", "value": "={{ $vars.FIREBASE_DB_URL }}", "type": "string" },
-            { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS || '' }}", "type": "string" },
-            { "id": "a3", "name": "whapiBase", "value": "={{ $vars.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
+            { "id": "a1", "name": "fbUrl", "value": "https://polytournament-87d5b-default-rtdb.firebaseio.com", "type": "string" },
+            { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS ? ($vars.FIREBASE_AUTH_QS.charAt(0) === '?' ? $vars.FIREBASE_AUTH_QS : '?auth=' + $vars.FIREBASE_AUTH_QS) : '' }}", "type": "string" },
+            { "id": "a3", "name": "whapiBase", "value": "https://gate.whapi.cloud", "type": "string" },
             { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" },
             { "id": "a5", "name": "waGroupId", "value": "={{ $vars.WA_GROUP_ID }}", "type": "string" }
           ]

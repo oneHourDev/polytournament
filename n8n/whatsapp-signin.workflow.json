@@ -20,13 +20,13 @@
         "assignments": {
           "assignments": [
             { "id": "a1", "name": "fbUrl", "value": "https://polytournament-87d5b-default-rtdb.firebaseio.com", "type": "string" },
-            { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS || '' }}", "type": "string" },
-            { "id": "a3", "name": "whapiBase", "value": "={{ $vars.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
+            { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS ? ($vars.FIREBASE_AUTH_QS.charAt(0) === '?' ? $vars.FIREBASE_AUTH_QS : '?auth=' + $vars.FIREBASE_AUTH_QS) : '' }}", "type": "string" },
+            { "id": "a3", "name": "whapiBase", "value": "https://gate.whapi.cloud", "type": "string" },
             { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" },
             { "id": "a5", "name": "botNumber", "value": "420776374284", "type": "string" },
             { "id": "a6", "name": "anthropicKey", "value": "={{ $vars.ANTHROPIC_API_KEY }}", "type": "string" },
             { "id": "a7", "name": "anthropicModel", "value": "={{ $vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}", "type": "string" },
-            { "id": "a8", "name": "hubUrl", "value": "={{ $vars.HUB_BASE_URL || 'https://polytournament-87d5b.web.app' }}", "type": "string" }
+            { "id": "a8", "name": "hubUrl", "value": "={{ $vars.HUB_BASE_URL || 'https://onehourdev.github.io/polytournament' }}", "type": "string" }
           ]
         },
         "options": {}
@@ -149,7 +149,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Tag me and just tell me what you want — plain words, English/Čeština/Slovenčina:\\n• \"sign me in\" — join the current tournament\\n• \"I beat @player\" — report that you won\\n• \"help\" — show this\\n• \"start a tournament\" — begin one (coming soon)';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
+        "jsCode": "// ── help: explain the commands (incl. what a tournament needs), tag requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Tag me and just say what you want — plain words (EN/CZ/SK):\\n'\n  + '• \"sign me in\" — join the current tournament\\n'\n  + '• \"I beat @player\" — report that you won a match\\n'\n  + '• \"start a tournament\" — create the next one (only the current leader can). Give me:\\n'\n  + '   – style: might, or glory + tier (e.g. glory 15k)\\n'\n  + '   – map type (e.g. Drylands) and map size (e.g. Normal)\\n'\n  + '   – nation (e.g. Ai-Mo)\\n'\n  + '   – bots: count + difficulty if any (e.g. 14 Crazy)\\n'\n  + '   e.g. \"start a glory 15k tournament, Drylands, Normal, Ai-Mo, 14 Crazy bots\"\\n'\n  + '• \"help\" — show this (anything else and I\\'ll just roast you 😏)';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
       },
       "id": "wf1-help",
       "name": "Handle help",
