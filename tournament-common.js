@@ -295,13 +295,11 @@ function renderScoreboard() {
       displayRank = idx + 1;
     }
     const position = tieGroupStart !== null ? `T${tieGroupStart}` : `${displayRank}`;
-    const signedIn = (window.PARTICIPANTS instanceof Set) && window.PARTICIPANTS.has(normalizeNick(PLAYERS[s.idx].name));
-    const badge = signedIn ? ' <span class="signed-in" title="Signed in via WhatsApp">✓</span>' : '';
 
     html += `<div class="score-card ${leader} ${tied}">
       <div class="sc-position">#${position}</div>
       ${avatarEl(s.idx, 80)}
-      <div class="sc-name">${PLAYERS[s.idx].name}${badge}</div>
+      <div class="sc-name">${PLAYERS[s.idx].name}</div>
       <div class="sc-pts">${s.pts} <span>POINTS</span></div>
       <div class="sc-record">${s.wins}V – ${s.losses}P</div>
     </div>`;
@@ -675,14 +673,10 @@ function loadDynamicTournament(entry) {
   if (h1) h1.textContent = title;
   if (sub) sub.textContent = buildSubtitle(entry.setup, entry.subtitle);
 
+  // `players` is the single source of truth for who is in the tournament: a plain
+  // list of nickname strings. The WhatsApp bot appends to it on sign-in, and it
+  // can be edited by hand in Firebase. The board renders exactly this list.
   setPlayers(entry.players || []);
-  // Participants (who has signed in via the WhatsApp bot) live under the same
-  // registry entry, so they arrive with the tournaments read — no extra listener.
-  window.PARTICIPANTS = new Set(
-    Object.values(entry.participants || {})
-      .map(p => normalizeNick(p && p.nickname))
-      .filter(Boolean)
-  );
   // Match results live INSIDE the registry entry, so creating a tournament is
   // just adding a child under "tournaments" — no separate node or rule per
   // tournament. (Legacy pages still use their own top-level nodes.)

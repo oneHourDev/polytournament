@@ -6,7 +6,7 @@ Firebase's **REST API**. No Cloud Functions, no Blaze. All secrets live in n8n.
 
 | File | Trigger | What it does |
 |------|---------|--------------|
-| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | Routes `/`-commands: `/sign-in` looks up the nickname in the `nickname_number_mapping` Data Table, matches the roster, **writes** `participants/<Nickname>`, and replies; any other command replies "Command not recognized". |
+| `whatsapp-signin.workflow.json` | Webhook (Whapi inbound) | An **AI node (Claude Haiku)** classifies the @mention into an intent (`sign_in` / `report_win` / `help` / `start_tournament`, else `unknown`); the sign-in handler resolves the sender's nickname via the `nickname_number_mapping` Data Table and **appends it to the tournament's `players` list** (the single list the board renders), and replies. Unknown → a friendly "try rephrasing". |
 | `score-announcement.workflow.json` | Schedule (every minute) | Polls the active tournament's `scores`, announces any with a winner and `notified != true` via Whapi, then marks them `notified: true`. |
 
 Built from **core nodes only** (Webhook, Schedule, Set, Code, Respond). Firebase
@@ -44,6 +44,9 @@ read config from **n8n Variables** (`$vars`). Add each one under
 | `WA_GROUP_ID` | announcements | Target group id (`...@g.us`) |
 | `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
 | `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you lock down the DB |
+| `ANTHROPIC_API_KEY` | classify / create / chat | Anthropic API key for intent classification, tournament-setup extraction, and the roast chat. If unset, classification falls back to keywords and chat replies a canned line. |
+| `ANTHROPIC_MODEL` | classify / create / chat | *(optional)* defaults to `claude-haiku-4-5-20251001` |
+| `HUB_BASE_URL` | create | *(optional)* base URL of the hub for the tournament link; defaults to `https://polytournament-87d5b.web.app` (→ `<base>/#t=<id>`) |
 
 > If your n8n plan doesn't include Variables, either paste the values directly
 > into the **Config** node fields, or store the Whapi token as an HTTP **Header
@@ -63,37 +66,91 @@ After importing, open the **`Get Nickname (Data Table)`** node and:
 
 Add a row per player, e.g. `number = 420123456789`, `nickname = MorPet87`.
 
-## Command routing (mention-gated, separate nodes)
+## Command routing (mention-gated, AI intent classifier)
 
 ```
-Webhook → Config → Parse Message → Bot mentioned? ─true→ Route Command ┬ sign-in          → Get Nickname → Handle sign-in
-                                        └false→ (ignored)              ├ help             → Handle help
-                                                                       ├ start-tournament → Handle start-tournament
-                                                                       ├ defeated         → Handle defeated
-                                                                       └ (default)        → Command Not Recognized
+Webhook → Config → Parse Message → Bot mentioned? ─true→ AI Classify (Claude) → Route Command ┬ sign_in          → Get Nickname → Handle sign-in
+                                        └false→ (ignored)                                     ├ help             → Handle help
+                                                                                              ├ start_tournament → Get Creator → Handle start-tournament
+                                                                                              ├ report_win       → Get Opponent → Get Sender → Handle defeated
+                                                                                              └ unknown          → AI Chat (Claude)
 ```
 
 - **The bot only reacts when it is @mentioned.** `Parse Message` checks
   `messages[0].context.mentions` for the **bot number** (set in the `Config`
   node's `botNumber`, default `420776374284`), and ignores the bot's own
   messages (`from_me` or `from === botNumber`). Everything else is dropped.
-- **Commands are plain words after the mention** (no slash): the first non-`@`
-  word is the command. So `@bot sign-in`, `@bot help`, `@bot defeated @player`.
-- **Route Command** (Switch) sends each known word to its own handler node; any
-  other word falls through to **Command Not Recognized**. Replies tag the
-  requester (`@<sender>`).
+- **No exact command needed — say it however you like.** The `AI Classify
+  (Claude)` node reads the message and picks one intent (`sign_in`,
+  `report_win`, `help`, `start_tournament`, or `unknown`). "add me", "sign me
+  up", "I beat @player", "porazil som @player" all work, in English or CZ/SK.
+- **The AI classifies intent ONLY.** It never touches Firebase and never invents
+  data: the opponent for `report_win` comes from the message's `@mentions`
+  (parsed into `targetPlayers`), the Data Table resolves the nickname, and every
+  write stays in the (tested) handler nodes.
+- **Fallback, never a dead bot.** If the Anthropic call errors, returns junk, or
+  `ANTHROPIC_API_KEY` is unset, the node degrades to the deterministic
+  `classifyIntent` keyword matcher (mirrored from `lib/bot-logic.js`).
+- **Route Command** (Switch) routes on `intent`; `unknown` (and anything
+  unmatched) falls through to **Command Not Recognized**, which asks the user to
+  rephrase. Replies tag the requester (`@<sender>`).
 
-| Command | Node | Status |
-|---------|------|--------|
-| `sign-in` | Handle sign-in | ✅ implemented (Data Table → roster → participant) |
-| `help` | Handle help | ✅ lists all commands, tags requester |
-| `start-tournament` | Handle start-tournament | 🚧 placeholder ("coming soon") |
-| `defeated @player` | Get Opponent (Data Table) → Handle defeated | 🚧 resolves the tagged opponent's number → nickname; result recording TBD |
-| *(anything else)* | Command Not Recognized | ✅ "command not recognized" |
+| Intent | Example phrasings | Node | Status |
+|--------|-------------------|------|--------|
+| `sign_in` | "sign me in", "add me", "prihlás ma" | Handle sign-in | ✅ implemented (Data Table → append nickname to `players`) |
+| `help` | "help", "what can you do", "pomoc" | Handle help | ✅ lists commands, tags requester |
+| `start_tournament` | "create a glory 15k tournament, Drylands, Normal, Ai-Mo, 14 Crazy bots" | Get Creator → Handle start-tournament | ✅ **leader-only**: Claude extracts the setup, validates required fields, creates `t(N+1)` (empty players) and sets it active — see below |
+| `report_win` | "I beat @player", "porazil som @player" | Get Opponent → Get Sender → Handle defeated | ✅ resolves winner (sender) + loser (tagged), then writes `results/<a>-<b>` **and** `scores/<a>-<b>` (feeds ranking + announcements), mirroring the web app's `saveScore` |
+| `unknown` | *(anything else)* | AI Chat (Claude) | ✅ **roast mode** — pulls the last ~30 group messages from Whapi for context and fires back a short, funny Polytopia-flavored jab (see below) |
 
 **Mentions:** Whapi only tags a person if the send request includes **both** the
 `@<number>` in the body **and** a `mentions: ["<number>", …]` array. Every reply
 node does this (tagging the requester, and the opponent for `defeated`).
+
+## Creating a tournament (`start_tournament`, leader-only)
+
+`Get Creator (Data Table)` resolves the requester's nickname, then
+`Handle start-tournament`:
+
+1. **Authorizes** — only the player **currently ranked #1** in the active
+   tournament may create the next one (it need **not** be finished). The bot
+   recomputes the standings with `currentLeaders` (a faithful port of the web
+   scoreboard's `calcStats`/`sortByRank` — points = wins, head-to-head /
+   beat-all-in-group tie-breaks). An unresolved tie at the top lets any tied
+   leader create; if no match has been played yet, nobody can (no leader).
+2. **Extracts** the setup from the message with **Claude** into
+   `{ style, gloryTier, mapType, mapSize, nation, botCount, botDifficulty }`
+   (EN/CZ/SK).
+3. **Validates** required fields — `style`, `mapType`, `mapSize`, `nation` are
+   mandatory; `gloryTier` is required when `style` is glory; `botDifficulty` when
+   `botCount > 0`. Missing anything → **denied**, replying with the exact list.
+4. **Creates** `t(N+1)` — `order`/`title` auto-increment ("Tournament N"),
+   `legacy:false`, the parsed `setup`, and an **empty `players` list** (players
+   join via sign-in) — then **sets `latest_tournament`** to it so it's active
+   immediately, and replies with a **direct link** to the board
+   (`<hubUrl>/#t=<id>`).
+
+The id/order/validation/build and ranking logic all live in the tested
+`lib/bot-logic.js` (`currentLeaders`, `validateNewTournament`,
+`nextTournamentId`, `buildTournamentEntry`).
+
+## AI chat / roast fallback (`unknown` → `AI Chat (Claude)`)
+
+Anything that isn't a command doesn't get a "not recognized" — the bot **plays
+along**. Because it only runs when the bot is @mentioned, it never chats
+unprompted. The node:
+
+1. `GET`s the last ~30 messages of the group from Whapi
+   (`/messages/list/<ChatID>?count=30`) and builds a transcript with
+   `buildTranscript` (text only, oldest→newest, display names — never numbers).
+2. Calls **Claude** with a playful "PolyBot" persona that roasts the players
+   good-naturedly, leans into Polytopia flavor, and replies in the group's
+   language (CZ/SK/EN). One short line, tagging the requester.
+3. If Whapi context or Claude is unavailable it still replies with a canned
+   quip — never a dead end.
+
+`buildTranscript` is tested in `lib/bot-logic.js`; the persona + fetch live in the
+node. Tune the persona in the `AI Chat (Claude)` node's prompt.
 
 ## How announcements work (no push, no Blaze)
 
@@ -104,6 +161,9 @@ re-announces next tick. Tune the interval on the **Every minute** node.
 
 ## Keep logic in sync
 
-The Code nodes mirror **`lib/bot-logic.js`**, which is unit-tested (`npm test`).
-Test the sign-in decision logic against live Firebase with
-`node scripts/bot-cli.mjs /sign-in <nickname>`.
+The Code nodes mirror **`lib/bot-logic.js`**, which is unit-tested (`npm test`) —
+the classifier (`normalizeIntent` / `classifyIntent` / `intentCatalog`), sign-in
+(`addPlayerToList`), win recording (`buildWinRecord`), and tournament creation +
+ranking (`currentLeaders` / `validateNewTournament` / `nextTournamentId` /
+`buildTournamentEntry`). Test the sign-in decision logic against live Firebase
+with `node scripts/bot-cli.mjs /sign-in <nickname>`.

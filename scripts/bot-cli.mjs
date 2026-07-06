@@ -39,12 +39,16 @@ if (route.kind !== 'sign-in') {
 const pointer = await get('latest_tournament');
 const registry = (pointer && typeof pointer === 'string') ? null : (await get('tournaments')) || {};
 const tid = b.pickLatestTid(pointer, registry || {});
-const players = tid ? await get(`tournaments/${tid}/players`) : [];
+const players = tid ? (await get(`tournaments/${tid}/players`)) || [] : [];
 
-const res = b.resolveSignIn({ pointer, registry: registry || {}, players, nickname });
-if (res.ok) {
-  await put(`tournaments/${res.tid}/participants/${res.participantKey}`, res.record);
+// Sign-in appends the nickname to the tournament's players list (the single
+// source of truth the board renders). No participants node.
+const res = b.addPlayerToList(players, nickname);
+if (tid && res.ok && res.added) {
+  await put(`tournaments/${tid}/players`, res.players);
 }
 console.log(`\n→ /sign-in  nickname: ${nickname || '(none)'}`);
-console.log(`← ok=${res.ok}${res.code ? '  code=' + res.code : ''}`);
-console.log(res.message);
+if (!tid) console.log('← ok=false  code=no_tournament\n⚠️ There is no active tournament right now.');
+else if (!res.ok) console.log(`← ok=false  code=${res.code}\n⚠️ Your number is not registered for this tournament.`);
+else if (res.added) console.log(`← ok=true  added\n✅ ${res.nickname} — you're now in ${tid}.`);
+else console.log(`← ok=true  already\nℹ️ ${res.nickname} is already in ${tid}.`);

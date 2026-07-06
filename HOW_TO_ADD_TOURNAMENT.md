@@ -49,6 +49,12 @@ rule. Legacy tournaments 1–4 still use their own top-level nodes
 
 ---
 
+> **Or create it from WhatsApp.** The bot's `start_tournament` command builds the
+> same entry automatically (auto `order`/title, empty `players`, and sets it
+> active) — but **only the player currently ranked #1** in the active tournament
+> may trigger it. See [`n8n/README.md`](n8n/README.md). The manual steps below
+> stay valid for hand-seeding or editing.
+
 ## Add a new dynamic tournament (Tournament 5, 6, …)
 
 ### 1. One-time Firebase rules (already done for this project)

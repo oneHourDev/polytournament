@@ -8,7 +8,7 @@ Functions and no Blaze plan required**. Everything runs on the free Spark plan.
 WhatsApp group ⇄ Whapi.Cloud ⇄ n8n (private) ──REST──▶ Firebase RTDB ◀── frontend
    (bot number,    (hosted        │                       ▲
     scan QR)        gateway)      │  nicknames only        │  writes scores (notified:false)
-                phone → nickname  │                        │  reads players/participants
+                phone → nickname  │                        │  reads players + results
                 resolved here — ALL secrets in n8n
 ```
 
@@ -22,11 +22,13 @@ WhatsApp group ⇄ Whapi.Cloud ⇄ n8n (private) ──REST──▶ Firebase RT
 
 ```
 tournaments/<tid>/
-  order, title, setup{…}, players:[ "Nick1", … ]     # expected roster
-  results/<matchId>        = "1:0"                    # positional; drives ranking
+  order, title, setup{…}
+  players:[ "Nick1", … ]     # THE single player list: who is in the tournament.
+                             # Sign-in appends to it; also hand-editable. The board
+                             # renders exactly this list. Result keys index into it.
+  results/<matchId>        = "1:0"                    # positional (players index); drives ranking
   scores/<matchId>         = { winner_nickname, loser_nickname, result,
-                               notified:false, created_at, … }   # written by the app
-  participants/<Nickname>  = { nickname, status:"signed_in", joined_at, tournament_id }
+                               notified:false, created_at, … }   # written by the app OR the bot's report_win
 latest_tournament = "<tid>"                            # active-tournament pointer
 ```
 
@@ -38,20 +40,56 @@ Adding a player is simply a **write** into Firebase. n8n does it directly:
 
 1. A group message hits the n8n **`whatsapp-inbound`** webhook. The bot reacts
    **only when it is @mentioned** (`messages[0].context.mentions` contains the
-   bot number) and never to its own messages. The command is the first plain word
-   after the mention: `sign-in`, `help`, `start-tournament`, `defeated @player`.
-2. A **Switch** routes each command to its own node; unknown words reply
-   "command not recognized". Replies tag the requester. The **`sign-in`** handler:
+   bot number) and never to its own messages.
+2. An **AI node (Claude Haiku)** classifies the message into one intent —
+   `sign_in`, `report_win`, `help`, `start_tournament`, or `unknown` — so users
+   write naturally ("add me", "I beat @player", "porazil som @player") in English
+   or CZ/SK instead of exact tokens. **The AI classifies intent only:** the
+   opponent comes from the message's `@mentions`, and all writes stay in the
+   deterministic handlers. If the AI call fails (or no `ANTHROPIC_API_KEY`), a
+   keyword fallback classifies instead — never a dead bot.
+3. A **Switch** routes each intent to its own node; `unknown` replies asking the
+   user to rephrase. Replies tag the requester. The **`sign_in`** handler:
    - resolves sender phone → nickname via the **`nickname_number_mapping`** n8n
      Data Table (`number` → `nickname`) — the only place a phone number appears,
    - `GET latest_tournament` (falls back to highest-`order` tournament),
    - `GET tournaments/<tid>/players`,
-   - matches the nickname (**case-insensitive + trimmed**),
-   - on match: `PUT tournaments/<tid>/participants/<Nickname>`,
-   - replies in the group (✅ / ⚠️ not recognized / not registered).
+   - **appends the nickname to `players`** (case-insensitive dedupe keeps the
+     existing spelling), then `PUT tournaments/<tid>/players` with the new list,
+   - replies in the group (✅ signed in / ℹ️ already in / ⚠️ number not registered
+     / ⚠️ no active tournament).
 
-No repo endpoint, no shared secret exposed anywhere. The frontend shows a ✓ badge
-for signed-in players (it reads `participants` with the normal tournaments read).
+No repo endpoint, no shared secret exposed anywhere. The Data Table (number →
+nickname) is the whitelist — only known numbers resolve to a nickname, so only
+they can join. The frontend renders `players` directly (with the normal
+tournaments read), so a sign-in shows up on the board with no extra listener.
+
+The **`report_win`** handler ("I beat @player") records a result the same way:
+it resolves **both** nicknames via the Data Table (winner = sender, loser = the
+tagged opponent), `GET`s the roster to find their positions, then writes
+`results/<a>-<b>` (positional, drives ranking) **and** `scores/<a>-<b>`
+(`winner_nickname` + `notified:false`) — exactly what the web app's `saveScore`
+writes, so the ranking updates and Feature 2 announces it. The positional/canonical
+logic is the tested `buildWinRecord` in `n8n/lib/bot-logic.js`.
+
+The **`start_tournament`** handler creates the next tournament, but **only the
+player currently ranked #1** in the active tournament may do so (it need not be
+finished). The bot recomputes standings with `currentLeaders` — a faithful port
+of the web scoreboard (`calcStats`/`sortByRank`) — so "leader" matches what
+players see. Claude then extracts the setup from the message; required fields are
+`style`, `mapType`, `mapSize`, `nation` (plus `gloryTier` when glory, and
+`botDifficulty` when `botCount > 0`) — anything missing is **denied with the
+list**. On success it writes `tournaments/t(N+1)` (auto `order`/title, empty
+`players`) and points `latest_tournament` at it, making it active. The reply
+includes a **direct link** to the board (`<HUB_BASE_URL>/#t=<id>`). Logic:
+`currentLeaders` / `validateNewTournament` / `nextTournamentId` /
+`buildTournamentEntry` in `n8n/lib/bot-logic.js`.
+
+Finally, an @mention that **isn't** a command falls through to **`AI Chat
+(Claude)`** — a playful "PolyBot" that reads the last ~30 group messages from
+Whapi (`/messages/list/<ChatID>`) for context and fires back a short, good-natured
+roast in the group's language. It only runs when tagged, so it never spams. The
+transcript builder (`buildTranscript`) is tested; the persona lives in the node.
 
 ## Feature 2 — Score announcements  (Firebase → WhatsApp, by polling)
 
@@ -71,8 +109,11 @@ Firebase→outbound trigger**:
 ## The logic is unit-tested
 
 Both Code nodes are mirrors of **`n8n/lib/bot-logic.js`** (the tested source of
-truth): `resolveSignIn`, `matchRoster`, `pickLatestTid`, `selectAnnouncements`,
-`announcementText`. Run `npm test` (includes `n8n/lib/bot-logic.test.js`).
+truth): `addPlayerToList`, `matchRoster`, `pickLatestTid`, `buildWinRecord`,
+`currentLeaders`, `validateNewTournament`, `nextTournamentId`,
+`buildTournamentEntry`, `selectAnnouncements`, `announcementText`, and the
+classifier's `normalizeIntent` / `classifyIntent` / `intentCatalog` /
+`buildTranscript`. Run `npm test` (includes `n8n/lib/bot-logic.test.js`).
 `scripts/bot-cli.mjs` runs the same logic against live Firebase from your terminal.
 
 ---
@@ -101,6 +142,9 @@ workflows read config from **Variables** (`$vars`), not environment variables.
 | `WA_GROUP_ID` | announcements | Target group id (`...@g.us`) |
 | `FIREBASE_DB_URL` | both | `https://polytournament-87d5b-default-rtdb.firebaseio.com` |
 | `FIREBASE_AUTH_QS` | both | *(optional)* `?auth=<token>` if you later lock down the DB |
+| `ANTHROPIC_API_KEY` | classify / create / chat | Anthropic key for classification, setup extraction, and the roast chat; unset → keyword fallback + canned quips |
+| `ANTHROPIC_MODEL` | classify / create / chat | *(optional)* defaults to `claude-haiku-4-5-20251001` |
+| `HUB_BASE_URL` | create | *(optional)* hub base for the tournament link; defaults to `https://polytournament-87d5b.web.app` |
 
 ---
 
@@ -111,7 +155,7 @@ workflows read config from **Variables** (`$vars`), not environment variables.
 - The RTDB currently has no auth (pre-existing posture), so `tournaments` /
   `latest_tournament` are publicly writable. To lock it down later, add Firebase
   auth and set `FIREBASE_AUTH_QS` in n8n; restrict public writes on
-  `participants` and `scores.notified` to the token n8n uses.
+  `players` and `scores.notified` to the token n8n uses.
 
 ## Open decisions
 

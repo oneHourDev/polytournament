@@ -23,7 +23,10 @@
             { "id": "a2", "name": "fbAuth", "value": "={{ $vars.FIREBASE_AUTH_QS || '' }}", "type": "string" },
             { "id": "a3", "name": "whapiBase", "value": "={{ $vars.WHAPI_BASE || 'https://gate.whapi.cloud' }}", "type": "string" },
             { "id": "a4", "name": "whapiToken", "value": "={{ $vars.WHAPI_TOKEN }}", "type": "string" },
-            { "id": "a5", "name": "botNumber", "value": "420776374284", "type": "string" }
+            { "id": "a5", "name": "botNumber", "value": "420776374284", "type": "string" },
+            { "id": "a6", "name": "anthropicKey", "value": "={{ $vars.ANTHROPIC_API_KEY }}", "type": "string" },
+            { "id": "a7", "name": "anthropicModel", "value": "={{ $vars.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001' }}", "type": "string" },
+            { "id": "a8", "name": "hubUrl", "value": "={{ $vars.HUB_BASE_URL || 'https://polytournament-87d5b.web.app' }}", "type": "string" }
           ]
         },
         "options": {}
@@ -64,20 +67,31 @@
     },
     {
       "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ── AI intent classification (Claude Haiku). The AI classifies intent ONLY; the\n// opponent comes from @mentions and every Firebase write stays in the tested\n// handlers. Falls back to a keyword classifier when the API errors / returns junk\n// so a Claude outage degrades to keyword routing, not a dead bot. Mirrors\n// normalizeIntent / classifyIntent / intentCatalog in lib/bot-logic.js. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nconst INTENTS=[\n {intent:'sign_in',description:'The sender wants to join / sign in to the current tournament.',examples:['sign me in','sign-in','add me','I want to join','prihlás ma','zapíš ma']},\n {intent:'report_win',description:'The sender is reporting that they won a match / beat the tagged opponent.',examples:['I beat @player','I defeated @player','I won against @player','porazil som @player','zdolal som @player']},\n {intent:'help',description:'The sender is asking what the bot can do.',examples:['help','what can you do','commands','pomoc']},\n {intent:'start_tournament',description:'The sender wants to start / create a new tournament.',examples:['start tournament','create a tournament','new tournament','začni turnaj','vytvor turnaj']}\n];\nconst INTENT_NAMES=INTENTS.map(i=>i.intent);\nfunction normalizeIntent(raw){const v=String(raw==null?'':raw).trim().toLowerCase().replace(/[-\\s]+/g,'_');return INTENT_NAMES.includes(v)?v:'unknown';}\nfunction classifyIntent(text){const t=normalizeNick(text);if(!t)return 'unknown';const has=(...kw)=>kw.some(k=>t.includes(k));if(has('beat','beated','defeat','won','porazil','zdolal','vyhral','vyhrál'))return 'report_win';if(has('sign in','sign-in','signin','add me','join','register','prihlas','prihlás','zapis','zapíš','pridaj'))return 'sign_in';if(has('start tournament','start a tournament','start-tournament','new tournament','create tournament','create a tournament','zacni','začni','vytvor turnaj'))return 'start_tournament';if(has('help','pomoc','command','what can you'))return 'help';return 'unknown';}\nfunction intentCatalog(){return INTENTS.map(i=>'- '+i.intent+': '+i.description+' Examples: '+i.examples.join('; ')+'.').join('\\n');}\n\nconst cfg=$('Config').first().json;\nconst p=$('Parse Message').first().json;\nconst text=String(p.text||'');\nlet intent=null;\nif(cfg.anthropicKey){\n  const sys='You are an intent classifier for a WhatsApp tournament bot. Read the user message and reply with ONLY a JSON object {\"intent\":\"<name>\"} — no prose, no code fences.\\n\\nChoose exactly one intent:\\n'+intentCatalog()+'\\n- unknown: the message matches none of the above.\\n\\nMessages may be in English, Czech or Slovak. If it does not clearly match a listed intent, use \"unknown\".';\n  try{\n    const res=await this.helpers.httpRequest({method:'POST',url:'https://api.anthropic.com/v1/messages',headers:{'x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json'},body:{model:cfg.anthropicModel||'claude-haiku-4-5-20251001',max_tokens:64,system:sys,messages:[{role:'user',content:text}]},json:true});\n    const raw=(res&&Array.isArray(res.content)&&res.content[0]&&res.content[0].text)?res.content[0].text:'';\n    const m=raw.match(/\\{[^}]*\\}/);\n    if(m){intent=normalizeIntent(JSON.parse(m[0]).intent);}\n  }catch(e){intent=null;}\n}\nif(intent===null){intent=classifyIntent(text);}\nreturn [{ json: Object.assign({}, p, { intent }) }];"
+      },
+      "id": "wf1-ai-classify",
+      "name": "AI Classify (Claude)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-360, 128]
+    },
+    {
+      "parameters": {
         "rules": {
           "values": [
             {
               "conditions": {
                 "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-                "conditions": [ { "id": "s1", "leftValue": "={{ $json.command }}", "rightValue": "sign-in", "operator": { "type": "string", "operation": "equals" } } ],
+                "conditions": [ { "id": "s1", "leftValue": "={{ $json.intent }}", "rightValue": "sign_in", "operator": { "type": "string", "operation": "equals" } } ],
                 "combinator": "and"
               },
-              "renameOutput": true, "outputKey": "sign-in"
+              "renameOutput": true, "outputKey": "sign_in"
             },
             {
               "conditions": {
                 "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-                "conditions": [ { "id": "s2", "leftValue": "={{ $json.command }}", "rightValue": "help", "operator": { "type": "string", "operation": "equals" } } ],
+                "conditions": [ { "id": "s2", "leftValue": "={{ $json.intent }}", "rightValue": "help", "operator": { "type": "string", "operation": "equals" } } ],
                 "combinator": "and"
               },
               "renameOutput": true, "outputKey": "help"
@@ -85,18 +99,18 @@
             {
               "conditions": {
                 "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-                "conditions": [ { "id": "s3", "leftValue": "={{ $json.command }}", "rightValue": "start-tournament", "operator": { "type": "string", "operation": "equals" } } ],
+                "conditions": [ { "id": "s3", "leftValue": "={{ $json.intent }}", "rightValue": "start_tournament", "operator": { "type": "string", "operation": "equals" } } ],
                 "combinator": "and"
               },
-              "renameOutput": true, "outputKey": "start-tournament"
+              "renameOutput": true, "outputKey": "start_tournament"
             },
             {
               "conditions": {
                 "options": { "caseSensitive": true, "typeValidation": "loose", "version": 2 },
-                "conditions": [ { "id": "s4", "leftValue": "={{ $json.command }}", "rightValue": "defeated", "operator": { "type": "string", "operation": "equals" } } ],
+                "conditions": [ { "id": "s4", "leftValue": "={{ $json.intent }}", "rightValue": "report_win", "operator": { "type": "string", "operation": "equals" } } ],
                 "combinator": "and"
               },
-              "renameOutput": true, "outputKey": "defeated"
+              "renameOutput": true, "outputKey": "report_win"
             }
           ]
         },
@@ -106,7 +120,7 @@
       "name": "Route Command",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [-240, 128]
+      "position": [-80, 128]
     },
     {
       "parameters": {
@@ -124,7 +138,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── sign-in: nickname from the Data Table row → match roster → write participant.\n// Confirms exactly what happened (newly signed in vs. already signed in). ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction sanitizeKey(s){return String(s).replace(/[.$#\\[\\]\\/ -]/g,'_');}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction matchRoster(players,nickname){const tgt=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===tgt)||null;}\n\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId; const who = '@'+p.number+' '; const M = [p.number];\nconst q = cfg.fbAuth || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst nickname = row.nickname ? String(row.nickname) : '';\n\nasync function send(message, mentions){ const b = { to: chatId, body: message }; if(mentions && mentions.length) b.mentions = mentions; if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); } return [{ json:{ message } }]; }\n\nif(!nickname){ return await send.call(this, who+'your number is not registered for this tournament.', M); }\nconst pointer = await this.helpers.httpRequest({ url: cfg.fbUrl+'/latest_tournament.json'+q, json:true }).catch(()=>null);\nlet tid = (pointer && typeof pointer==='string') ? pointer : null;\nif(!tid){ const reg = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments.json'+q, json:true }).catch(()=>({})); tid = pickLatestTid(null, reg||{}); }\nif(!tid){ return await send.call(this, who+'there is no active tournament right now.', M); }\nconst players = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q, json:true }).catch(()=>[]);\nconst match = matchRoster(players, nickname);\nif(!match){ return await send.call(this, who+'\"'+nickname+'\" is not on the player list for '+tid+'.', M); }\nconst title = (await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q, json:true }).catch(()=>null)) || tid;\nconst pKey = sanitizeKey(match);\nconst existing = await this.helpers.httpRequest({ url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, json:true }).catch(()=>null);\nif(existing && existing.nickname){ return await send.call(this, who+'ℹ️ '+match+' is already signed in to '+title+'.', M); }\nconst record = { nickname: match, status:'signed_in', joined_at: Date.now(), tournament_id: tid };\nawait this.helpers.httpRequest({ method:'PUT', url: cfg.fbUrl+'/tournaments/'+tid+'/participants/'+pKey+'.json'+q, body: record, json:true });\nreturn await send.call(this, who+'✅ Signed in! '+match+' is now registered for '+title+'.', M);"
+        "jsCode": "// ── sign-in: append the sender's nickname (resolved from the Data Table) to the\n// tournament's `players` list — the single source of truth the board renders\n// (there is no participants node). Case-insensitive dedupe. Mirrors\n// addPlayerToList in lib/bot-logic.js. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction matchRoster(players,nickname){const t=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===t)||null;}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction addPlayerToList(players,nickname){const list=Array.isArray(players)?players.slice():[];const clean=String(nickname==null?'':nickname).trim();if(!clean)return {ok:false,code:'missing_nickname'};const existing=matchRoster(list,clean);if(existing)return {ok:true,added:false,nickname:existing,players:list};list.push(clean);return {ok:true,added:true,nickname:clean,players:list};}\n\nconst cfg=$('Config').first().json;\nconst p=$('Parse Message').first().json;\nconst chatId=p.chatId; const M=[p.number]; const who='@'+p.number+' ';\nconst q=cfg.fbAuth||'';\nconst row=($input.first()&&$input.first().json)||{};\nconst nickname=row.nickname?String(row.nickname):'';\n\nasync function send(message,mentions){const b={to:chatId,body:message};if(mentions&&mentions.length)b.mentions=mentions;if(cfg.whapiToken){await this.helpers.httpRequest({method:'POST',url:cfg.whapiBase+'/messages/text',headers:{Authorization:'Bearer '+cfg.whapiToken},body:b,json:true});}return [{json:{message:message}}];}\n\nif(!nickname){return await send.call(this,who+'your number is not registered for this tournament.',M);}\nconst pointer=await this.helpers.httpRequest({url:cfg.fbUrl+'/latest_tournament.json'+q,json:true}).catch(()=>null);\nlet tid=(pointer&&typeof pointer==='string')?pointer:null;\nif(!tid){const reg=await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments.json'+q,json:true}).catch(()=>({}));tid=pickLatestTid(null,reg||{});}\nif(!tid){return await send.call(this,who+'there is no active tournament right now.',M);}\nconst title=(await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments/'+tid+'/title.json'+q,json:true}).catch(()=>null))||tid;\nconst players=await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q,json:true}).catch(()=>[]);\nconst res=addPlayerToList(players,nickname);\nif(res.added){\n  await this.helpers.httpRequest({method:'PUT',url:cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q,body:res.players,json:true});\n  return await send.call(this,who+'✅ Signed in! '+res.nickname+' is now in '+title+'.',M);\n}\nreturn await send.call(this,who+'ℹ️ '+res.nickname+' is already in '+title+'.',M);"
       },
       "id": "wf1-signin",
       "name": "Handle sign-in",
@@ -135,7 +149,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Commands (tag me + the word):\\n• sign-in — join the current tournament\\n• help — show this help\\n• start-tournament — begin a tournament (coming soon)\\n• defeated @player — report that you beat @player';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
+        "jsCode": "// ── help: list the commands, tagging the requester. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' Tag me and just tell me what you want — plain words, English/Čeština/Slovenčina:\\n• \"sign me in\" — join the current tournament\\n• \"I beat @player\" — report that you won\\n• \"help\" — show this\\n• \"start a tournament\" — begin one (coming soon)';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'help' } }];"
       },
       "id": "wf1-help",
       "name": "Handle help",
@@ -146,13 +160,13 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── start-tournament: placeholder (to be implemented). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' 🚧 start-tournament received — this command is coming soon.';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'start-tournament' } }];"
+        "jsCode": "// ── start_tournament: create the next tournament. ONLY the player currently\n// ranked #1 in the active tournament may create one (it need not be finished).\n// Claude extracts the setup fields from the message; required: style, mapType,\n// mapSize, nation (+ gloryTier if glory, + botDifficulty if botCount>0). The new\n// tournament is created with an EMPTY players list and set active. Mirrors\n// currentLeaders / validateNewTournament / nextTournamentId / buildTournamentEntry\n// in lib/bot-logic.js. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction getResultAt(results,r,c){if(r===c)return null;const key=(a,b)=>a+'-'+b;if(r<c)return (results&&results[key(r,c)])||null;const v=(results&&results[key(c,r)])||null;if(!v)return null;return v==='1:0'?'0:1':'1:0';}\nfunction calcStandings(players,results){const N=(players||[]).length;const stats=[];for(let i=0;i<N;i++){let wins=0,losses=0,played=0,remaining=0;for(let j=0;j<N;j++){if(i===j)continue;const r=getResultAt(results,i,j);if(r==='1:0'){wins++;played++;}else if(r==='0:1'){losses++;played++;}else remaining++;}stats.push({idx:i,wins:wins,losses:losses,played:played,remaining:remaining,pts:wins});}return stats;}\nfunction rankStandings(stats,results){const h2h=(a,b)=>{const r=getResultAt(results,a,b);if(r==='1:0')return -1;if(r==='0:1')return 1;return 0;};const beatAll=(idx,group)=>group.every(o=>o.idx===idx?true:getResultAt(results,idx,o.idx)==='1:0');const grouped={};stats.forEach(s=>{(grouped[s.pts]=grouped[s.pts]||[]).push(s);});const result=[];Object.keys(grouped).map(Number).sort((a,b)=>b-a).forEach(pts=>{const group=grouped[pts];if(group.length===1){group[0].isTied=false;result.push(group[0]);}else if(group.length===2){const h=h2h(group[0].idx,group[1].idx);if(h<0){group[0].isTied=false;group[1].isTied=false;result.push(group[0],group[1]);}else if(h>0){group[0].isTied=false;group[1].isTied=false;result.push(group[1],group[0]);}else{group[0].isTied=true;group[1].isTied=true;result.push(group[0],group[1]);}}else{const winners=group.filter(pp=>beatAll(pp.idx,group));if(winners.length===1){winners[0].isTied=false;const rest=group.filter(pp=>pp.idx!==winners[0].idx);rest.forEach(pp=>pp.isTied=true);result.push(winners[0],...rest.sort((a,b)=>b.wins-a.wins||a.losses-b.losses));}else{group.forEach(pp=>pp.isTied=true);result.push(...group.sort((a,b)=>b.wins-a.wins||a.losses-b.losses));}}});return result;}\nfunction currentLeaders(players,results){const list=players||[];const ranked=rankStandings(calcStandings(list,results),results);const top=ranked[0];if(!top||top.pts<=0)return [];if(!top.isTied)return [list[top.idx]];const leaders=[];for(const s of ranked){if(s.pts===top.pts&&s.isTied)leaders.push(list[s.idx]);else break;}return leaders;}\nfunction validateNewTournament(fields){const s=fields||{};const missing=[];const style=String(s.style==null?'':s.style).toLowerCase();if(style!=='might'&&style!=='glory')missing.push('style (might or glory)');if(!s.mapType)missing.push('map type');if(!s.mapSize)missing.push('map size');if(!s.nation)missing.push('nation');if(style==='glory'&&!s.gloryTier)missing.push('glory tier');const bots=(s.botCount==null||s.botCount==='')?0:Number(s.botCount);if(bots>0&&!s.botDifficulty)missing.push('bot difficulty');return {ok:missing.length===0,missing:missing};}\nfunction nextTournamentId(registry){let maxOrder=0;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>maxOrder)maxOrder=o;}let order=maxOrder+1;let id='t'+order;while(registry&&Object.prototype.hasOwnProperty.call(registry,id)){order++;id='t'+order;}return {id:id,order:order};}\nfunction buildTournamentEntry(fields,order){const s=fields||{};const style=String(s.style==null?'':s.style).toLowerCase();const setup={mapType:s.mapType,mapSize:s.mapSize,nation:s.nation,style:style};if(style==='glory')setup.gloryTier=s.gloryTier;const bots=(s.botCount==null||s.botCount==='')?0:Number(s.botCount);if(bots>0){setup.botCount=bots;setup.botDifficulty=s.botDifficulty;}return {order:order,title:'Tournament '+order,legacy:false,setup:setup,players:[]};}\n\nconst cfg=$('Config').first().json;\nconst p=$('Parse Message').first().json;\nconst chatId=p.chatId; const M=[p.number]; const who='@'+p.number+' ';\nconst q=cfg.fbAuth||'';\nconst row=($input.first()&&$input.first().json)||{};\nconst creator=row.nickname?String(row.nickname):'';\n\nasync function send(message,mentions){const b={to:chatId,body:message};if(mentions&&mentions.length)b.mentions=mentions;if(cfg.whapiToken){await this.helpers.httpRequest({method:'POST',url:cfg.whapiBase+'/messages/text',headers:{Authorization:'Bearer '+cfg.whapiToken},body:b,json:true});}return [{json:{message:message}}];}\n\nif(!creator){return await send.call(this,who+\"your number is not registered, so you can't create a tournament.\",M);}\n\n// 1) Authorize: creator must lead the current tournament (if one exists).\nconst pointer=await this.helpers.httpRequest({url:cfg.fbUrl+'/latest_tournament.json'+q,json:true}).catch(()=>null);\nconst registry=await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments.json'+q,json:true}).catch(()=>({}));\nconst curTid=pickLatestTid((pointer&&typeof pointer==='string')?pointer:null,registry||{});\nif(curTid){\n  const cur=(registry&&registry[curTid])||{};\n  const curTitle=cur.title||curTid;\n  const leaders=currentLeaders(cur.players||[],cur.results||{});\n  if(leaders.length===0){return await send.call(this,who+'no one leads '+curTitle+' yet — play some matches there first.',M);}\n  if(!leaders.some(n=>normalizeNick(n)===normalizeNick(creator))){return await send.call(this,who+'only the current leader ('+leaders.join(', ')+') of '+curTitle+' can start a new tournament.',M);}\n}\n\n// 2) Extract the setup fields from the message (Claude).\nlet fields=null;\nif(cfg.anthropicKey){\n  const sys='Extract Polytopia tournament setup from the user message. Reply with ONLY a JSON object with keys: style (\"might\"|\"glory\"|null), gloryTier (string|null), mapType (string|null), mapSize (string|null), nation (string|null), botCount (integer|null), botDifficulty (string|null). Use null for anything not stated. Messages may be English, Czech or Slovak.';\n  try{\n    const res=await this.helpers.httpRequest({method:'POST',url:'https://api.anthropic.com/v1/messages',headers:{'x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json'},body:{model:cfg.anthropicModel||'claude-haiku-4-5-20251001',max_tokens:300,system:sys,messages:[{role:'user',content:String(p.text||'')}]},json:true});\n    const raw=(res&&Array.isArray(res.content)&&res.content[0]&&res.content[0].text)?res.content[0].text:'';\n    const m=raw.match(/\\{[\\s\\S]*\\}/);\n    if(m){fields=JSON.parse(m[0]);}\n  }catch(e){fields=null;}\n}\nif(!fields){return await send.call(this,who+'I couldn\\'t read the tournament details. Include style, map type, map size and nation (e.g. \"glory 15k, Drylands, Normal, Ai-Mo, 14 Crazy bots\").',M);}\n\n// 3) Validate required fields.\nconst v=validateNewTournament(fields);\nif(!v.ok){return await send.call(this,who+'❌ can\\'t create — missing: '+v.missing.join(', ')+'. Send them and try again.',M);}\n\n// 4) Create + activate.\nconst next=nextTournamentId(registry||{});\nconst entry=buildTournamentEntry(fields,next.order);\nawait this.helpers.httpRequest({method:'PUT',url:cfg.fbUrl+'/tournaments/'+next.id+'.json'+q,body:entry,json:true});\nawait this.helpers.httpRequest({method:'PUT',url:cfg.fbUrl+'/latest_tournament.json'+q,body:JSON.stringify(next.id),headers:{'Content-Type':'application/json'}});\nconst su=entry.setup;\nconst desc='Style: '+(su.style==='glory'?('Glory '+(su.gloryTier||'')):'Might')+' · Map: '+su.mapType+' · Size: '+su.mapSize+' · Nation: '+su.nation+(su.botCount?(' · Bots: '+su.botCount+' '+(su.botDifficulty||'')):'');\nconst url=String(cfg.hubUrl||'').replace(/\\/+$/,'')+'/#t='+next.id;\nreturn await send.call(this,who+'✅ Created '+entry.title+' ('+next.id+') and set it active.\\n'+desc+'\\n🔗 '+url+'\\nSign in with \"@bot sign me in\".',M);"
       },
       "id": "wf1-start",
       "name": "Handle start-tournament",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 220]
+      "position": [460, 220]
     },
     {
       "parameters": {
@@ -169,22 +183,48 @@
     },
     {
       "parameters": {
+        "operation": "get",
+        "dataTableId": { "__rl": true, "value": "8FGuvQ1TAYofF7F7", "mode": "list", "cachedResultName": "nickname_number_mapping", "cachedResultUrl": "/projects/ByzftX6HdGqx8b8x/datatables/8FGuvQ1TAYofF7F7" },
+        "filters": { "conditions": [ { "keyName": "number", "keyValue": "={{ $('Parse Message').first().json.number }}" } ] }
+      },
+      "id": "wf1-datatable3",
+      "name": "Get Sender (Data Table)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [240, 560],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": { "__rl": true, "value": "8FGuvQ1TAYofF7F7", "mode": "list", "cachedResultName": "nickname_number_mapping", "cachedResultUrl": "/projects/ByzftX6HdGqx8b8x/datatables/8FGuvQ1TAYofF7F7" },
+        "filters": { "conditions": [ { "keyName": "number", "keyValue": "={{ $('Parse Message').first().json.number }}" } ] }
+      },
+      "id": "wf1-datatable4",
+      "name": "Get Creator (Data Table)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [20, 220],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── defeated @player: resolve the tagged opponent's number → nickname via the\n// Data Table. Result recording comes with start-tournament (placeholder). ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst chatId = p.chatId;\nconst target = (p.targetPlayers && p.targetPlayers[0]) || '';\nconst row = ($input.first() && $input.first().json) || {};\nconst oppNick = row.nickname ? String(row.nickname) : '';\n\nasync function send(message, mentions){ const b = { to: chatId, body: message }; if(mentions && mentions.length) b.mentions = mentions; if(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); } return [{ json:{ message } }]; }\n\nif(!target){ return await send.call(this, '@'+p.number+' tag the player you defeated, e.g. \"@bot defeated @player\".', [p.number]); }\nif(!oppNick){ return await send.call(this, '@'+p.number+\" I don't recognize @\"+target+' as a registered player.', [p.number, target]); }\nreturn await send.call(this, '@'+p.number+' 🚧 got it — you beat @'+target+' ('+oppNick+'). Result recording is coming soon.', [p.number, target]);"
+        "jsCode": "// ── report_win (\"I beat @player\"): record the result. Winner = sender, loser =\n// tagged opponent; both nicknames resolved via the Data Table (Get Opponent, then\n// Get Sender). Writes the positional results/<a>-<b> (drives ranking) AND\n// scores/<a>-<b> (explicit winner + notified:false → announce workflow) exactly\n// like the web app's saveScore. buildWinRecord is the tested logic in\n// lib/bot-logic.js — keep in sync. ──\nfunction normalizeNick(s){return String(s==null?'':s).trim().toLowerCase();}\nfunction matchRoster(players,nickname){const t=normalizeNick(nickname);return (players||[]).find(p=>normalizeNick(p)===t)||null;}\nfunction pickLatestTid(pointer,registry){if(pointer&&typeof pointer==='string')return pointer;let best=null,bo=-Infinity;for(const [id,t] of Object.entries(registry||{})){if(!t||id.startsWith('_'))continue;const o=typeof t.order==='number'?t.order:0;if(o>bo){best=id;bo=o;}}return best;}\nfunction buildWinRecord({players,winner,loser,now}){const list=players||[];const wName=matchRoster(list,winner);const lName=matchRoster(list,loser);if(!wName)return {ok:false,code:'winner_not_on_roster'};if(!lName)return {ok:false,code:'loser_not_on_roster'};if(normalizeNick(wName)===normalizeNick(lName))return {ok:false,code:'same_player'};const wi=list.findIndex(p=>normalizeNick(p)===normalizeNick(wName));const li=list.findIndex(p=>normalizeNick(p)===normalizeNick(lName));const a=Math.min(wi,li),b=Math.max(wi,li);const matchId=a+'-'+b;const resultVal=wi===a?'1:0':'0:1';const score={result:resultVal,winner_nickname:wName,loser_nickname:lName,row_nickname:list[a],col_nickname:list[b],match_id:matchId,notified:false,created_at:(now||Date.now)()};return {ok:true,matchId:matchId,resultVal:resultVal,score:score,winner:wName,loser:lName};}\n\nconst cfg=$('Config').first().json;\nconst p=$('Parse Message').first().json;\nconst chatId=p.chatId;\nconst q=cfg.fbAuth||'';\nconst target=(p.targetPlayers&&p.targetPlayers[0])||'';\nconst oppRow=($('Get Opponent (Data Table)').first()&&$('Get Opponent (Data Table)').first().json)||{};\nconst senderRow=($input.first()&&$input.first().json)||{};\nconst oppNick=oppRow.nickname?String(oppRow.nickname):'';\nconst winnerNick=senderRow.nickname?String(senderRow.nickname):'';\n\nasync function send(message,mentions){const b={to:chatId,body:message};if(mentions&&mentions.length)b.mentions=mentions;if(cfg.whapiToken){await this.helpers.httpRequest({method:'POST',url:cfg.whapiBase+'/messages/text',headers:{Authorization:'Bearer '+cfg.whapiToken},body:b,json:true});}return [{json:{message:message}}];}\n\nif(!target){return await send.call(this,'@'+p.number+' tag the player you beat, e.g. \"@bot I beat @player\".',[p.number]);}\nif(!winnerNick){return await send.call(this,'@'+p.number+' your number is not registered for this tournament.',[p.number]);}\nif(!oppNick){return await send.call(this,'@'+p.number+\" I don't recognize @\"+target+' as a registered player.',[p.number,target]);}\n\nconst pointer=await this.helpers.httpRequest({url:cfg.fbUrl+'/latest_tournament.json'+q,json:true}).catch(()=>null);\nlet tid=(pointer&&typeof pointer==='string')?pointer:null;\nif(!tid){const reg=await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments.json'+q,json:true}).catch(()=>({}));tid=pickLatestTid(null,reg||{});}\nif(!tid){return await send.call(this,'@'+p.number+' there is no active tournament right now.',[p.number]);}\nconst players=await this.helpers.httpRequest({url:cfg.fbUrl+'/tournaments/'+tid+'/players.json'+q,json:true}).catch(()=>[]);\nconst rec=buildWinRecord({players:players,winner:winnerNick,loser:oppNick});\nif(!rec.ok){\n  if(rec.code==='winner_not_on_roster'){return await send.call(this,'@'+p.number+' \"'+winnerNick+'\" is not on the player list for '+tid+'.',[p.number]);}\n  if(rec.code==='loser_not_on_roster'){return await send.call(this,'@'+p.number+' @'+target+' (\"'+oppNick+'\") is not on the player list for '+tid+'.',[p.number,target]);}\n  if(rec.code==='same_player'){return await send.call(this,'@'+p.number+\" you can't report a win against yourself.\",[p.number]);}\n  return await send.call(this,'@'+p.number+\" couldn't record that result.\",[p.number]);\n}\n// Firebase RTDB needs a JSON *value* for the leaf. n8n/axios sends a string body\n// verbatim, so a bare \"1:0\" arrives unquoted and RTDB 400s — JSON.stringify it.\nawait this.helpers.httpRequest({method:'PUT',url:cfg.fbUrl+'/tournaments/'+tid+'/results/'+rec.matchId+'.json'+q,body:JSON.stringify(rec.resultVal),headers:{'Content-Type':'application/json'}});\nawait this.helpers.httpRequest({method:'PUT',url:cfg.fbUrl+'/tournaments/'+tid+'/scores/'+rec.matchId+'.json'+q,body:rec.score,json:true});\nreturn await send.call(this,'@'+p.number+' ✅ Recorded: '+rec.winner+' beat @'+target+' ('+rec.loser+') in '+tid+'.',[p.number,target]);"
       },
       "id": "wf1-defeated",
       "name": "Handle defeated",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 400]
+      "position": [480, 400]
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// ── default: unrecognized command. ──\nconst cfg = $('Config').first().json;\nconst p = $('Parse Message').first().json;\nconst message = '@'+p.number+' command not recognized. Tag me with \"help\" to see the commands.';\nconst b = { to: p.chatId, body: message, mentions: [p.number] };\nif(cfg.whapiToken){ await this.helpers.httpRequest({ method:'POST', url: cfg.whapiBase+'/messages/text', headers:{ Authorization:'Bearer '+cfg.whapiToken }, body: b, json:true }); }\nreturn [{ json:{ sent:'not_recognized' } }];"
+        "jsCode": "// ── unknown intent → funny AI chat. The bot only reaches here when @mentioned\n// with something that isn't a command, so it never spams the group. It pulls the\n// last ~30 group messages from Whapi for context and fires back a short, playful\n// roast in the group's language. buildTranscript is tested in lib/bot-logic.js. ──\nfunction buildTranscript(messages,opts){const o=opts||{};const limit=o.limit||30;const botName=o.botName||'PolyBot';const list=(Array.isArray(messages)?messages:[]).filter(m=>m&&m.text&&typeof m.text.body==='string'&&m.text.body.trim()).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0)).slice(-limit);return list.map(m=>(m.from_me?botName:(m.from_name||'someone'))+': '+m.text.body.trim()).join('\\n');}\n\nconst cfg=$('Config').first().json;\nconst p=$('Parse Message').first().json;\nconst chatId=p.chatId; const M=[p.number]; const who='@'+p.number+' ';\n\nasync function send(message,mentions){const b={to:chatId,body:message};if(mentions&&mentions.length)b.mentions=mentions;if(cfg.whapiToken){await this.helpers.httpRequest({method:'POST',url:cfg.whapiBase+'/messages/text',headers:{Authorization:'Bearer '+cfg.whapiToken},body:b,json:true});}return [{json:{message:message}}];}\n\n// Pull recent group context from Whapi (best-effort; no context is fine too).\nlet transcript='';\nif(cfg.whapiToken){\n  try{\n    const res=await this.helpers.httpRequest({method:'GET',url:cfg.whapiBase+'/messages/list/'+encodeURIComponent(chatId)+'?count=30&sort=desc',headers:{Authorization:'Bearer '+cfg.whapiToken},json:true});\n    const arr=(res&&Array.isArray(res.messages))?res.messages:(Array.isArray(res)?res:[]);\n    transcript=buildTranscript(arr,{limit:30,botName:'PolyBot'});\n  }catch(e){transcript='';}\n}\n\nlet reply='';\nif(cfg.anthropicKey){\n  const sys='You are PolyBot, a witty, playful WhatsApp bot in a group of friends who play Polytopia (the turn-based strategy game). The friends constantly roast and tease each other and want you to join in. Reply with ONE short (1-2 sentence) funny, punchy message that riffs on the recent conversation and pokes good-natured fun — a light roast/banter, never genuinely hurtful, no slurs or harassment. Lean into Polytopia flavor when it fits (tribes like Bardur, Imperius, Oumaji; glory runs; Crazy bots; getting rushed turn 3). Match the language of the group (Czech, Slovak, or English). Do NOT explain yourself, do NOT wrap the line in quotes — just say it.';\n  const user=(transcript?('Recent group chat:\\n'+transcript+'\\n\\n'):'')+'You were just tagged with: \"'+String(p.text||'')+'\". Fire off one witty reply.';\n  try{\n    const res=await this.helpers.httpRequest({method:'POST',url:'https://api.anthropic.com/v1/messages',headers:{'x-api-key':cfg.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json'},body:{model:cfg.anthropicModel||'claude-haiku-4-5-20251001',max_tokens:200,system:sys,messages:[{role:'user',content:user}]},json:true});\n    reply=(res&&Array.isArray(res.content)&&res.content[0]&&res.content[0].text)?String(res.content[0].text).trim():'';\n  }catch(e){reply='';}\n}\nif(!reply){reply=\"my joke circuits are offline right now — but bold of you to tag me. 🤖\";}\nreturn await send.call(this,who+reply,M);"
       },
       "id": "wf1-unknown",
-      "name": "Command Not Recognized",
+      "name": "AI Chat (Claude)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [-40, 620]
@@ -194,18 +234,21 @@
     "WhatsApp Inbound": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
     "Config": { "main": [[{ "node": "Parse Message", "type": "main", "index": 0 }]] },
     "Parse Message": { "main": [[{ "node": "Bot mentioned?", "type": "main", "index": 0 }]] },
-    "Bot mentioned?": { "main": [[{ "node": "Route Command", "type": "main", "index": 0 }], []] },
+    "Bot mentioned?": { "main": [[{ "node": "AI Classify (Claude)", "type": "main", "index": 0 }], []] },
+    "AI Classify (Claude)": { "main": [[{ "node": "Route Command", "type": "main", "index": 0 }]] },
     "Route Command": {
       "main": [
         [{ "node": "Get Nickname (Data Table)", "type": "main", "index": 0 }],
         [{ "node": "Handle help", "type": "main", "index": 0 }],
-        [{ "node": "Handle start-tournament", "type": "main", "index": 0 }],
+        [{ "node": "Get Creator (Data Table)", "type": "main", "index": 0 }],
         [{ "node": "Get Opponent (Data Table)", "type": "main", "index": 0 }],
-        [{ "node": "Command Not Recognized", "type": "main", "index": 0 }]
+        [{ "node": "AI Chat (Claude)", "type": "main", "index": 0 }]
       ]
     },
     "Get Nickname (Data Table)": { "main": [[{ "node": "Handle sign-in", "type": "main", "index": 0 }]] },
-    "Get Opponent (Data Table)": { "main": [[{ "node": "Handle defeated", "type": "main", "index": 0 }]] }
+    "Get Opponent (Data Table)": { "main": [[{ "node": "Get Sender (Data Table)", "type": "main", "index": 0 }]] },
+    "Get Sender (Data Table)": { "main": [[{ "node": "Handle defeated", "type": "main", "index": 0 }]] },
+    "Get Creator (Data Table)": { "main": [[{ "node": "Handle start-tournament", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

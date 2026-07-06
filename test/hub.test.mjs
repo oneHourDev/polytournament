@@ -205,22 +205,21 @@ console.log('\nTest 8: latest_tournament pointer selects the default view');
   ok(w.document.getElementById('hub-title').textContent === 'Tournament 1', 'pointer switches default to t1');
 }
 
-// ── Test 9: participant sign-in badge ──────────────────────────────────────
-console.log('\nTest 9: signed-in participants get a badge');
+// ── Test 9: board renders the players list (single source of truth) ─────────
+console.log('\nTest 9: board renders exactly the players list, no participants badge');
 {
   const REG = { t5: { order: 5, title: 'Tournament 5', legacy: false, setup: { style: 'might' },
-    players: ['OneHourPlayer', 'MorPet87'],
-    participants: { MorPet87: { nickname: 'MorPet87', status: 'signed_in', tournament_id: 't5' } } } };
+    players: ['OneHourPlayer', 'MorPet87'] } };
   const dom = makeDom('#t=t5');
   const w = dom.window;
   w.initHub({ apiKey: 'x', databaseURL: 'y' });
   w.__refs['tournaments']._cb({ val: () => REG });
   w.__refs['tournaments/t5/results']._cb({ val: () => ({}) }); // force a render
   const cards = [...w.document.querySelectorAll('#scoreboard .score-card')];
-  const morpet = cards.find(c => /MorPet87/.test(c.textContent));
-  const other = cards.find(c => /OneHourPlayer/.test(c.textContent));
-  ok(morpet && morpet.querySelector('.signed-in'), 'signed-in player shows ✓ badge');
-  ok(other && !other.querySelector('.signed-in'), 'not-signed-in player has no badge');
+  ok(cards.length === 2, 'both players rendered as cards');
+  ok(cards.some(c => /MorPet87/.test(c.textContent)), 'MorPet87 rendered');
+  ok(cards.some(c => /OneHourPlayer/.test(c.textContent)), 'OneHourPlayer rendered');
+  ok(!w.document.querySelector('.signed-in'), 'no signed-in badge anywhere (participants removed)');
 }
 
 // ── Test 10: registry read error falls back to cached registry ─────────────
