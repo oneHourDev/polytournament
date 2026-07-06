@@ -1,0 +1,12 @@
+{
+  "name": "polytournament",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Polytopia tournament tracker (static frontend + Firebase) with WhatsApp bot integration",
+  "scripts": {
+    "test": "node test/hub.test.mjs && node --test n8n/lib/bot-logic.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

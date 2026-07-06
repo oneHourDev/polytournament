@@ -1,3 +1,11 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Firebase
+.firebase/
+*-debug.log
+
 # IDE
 .idea/
 

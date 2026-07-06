@@ -5,37 +5,58 @@
 let N, TOTAL;
 let results = {};
 let database, resultsRef;
+let currentResultsPath = null;
 let activeCell = null;
 let toastTimer;
 
 // ─── FIREBASE FUNCTIONS ────────────────────────────────────────────────────
-function initFirebase(firebaseConfig, tournamentId) {
-  if (typeof firebase !== 'undefined' && firebaseConfig.apiKey !== "YOUR_API_KEY") {
-    try {
-      // Check if Firebase app already exists, otherwise initialize
-      if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
-      }
-      database = firebase.database();
-      resultsRef = database.ref(tournamentId);
-
-      // Listen for real-time updates
-      resultsRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          results = data;
-          render();
-          checkTournamentComplete();
-        }
-      });
-      console.log('✓ Firebase connected');
-      return true;
-    } catch (e) {
-      console.error('Firebase init failed:', e);
-      return false;
-    }
+// Initialize the Firebase app + database connection once. Safe to call
+// repeatedly (guarded by firebase.apps.length). Does NOT subscribe to any
+// tournament data — use subscribeResults() for that.
+function ensureFirebaseApp(firebaseConfig) {
+  if (typeof firebase === 'undefined' || !firebaseConfig || firebaseConfig.apiKey === "YOUR_API_KEY") {
+    return false;
   }
-  return false;
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    database = firebase.database();
+    console.log('✓ Firebase connected');
+    return true;
+  } catch (e) {
+    console.error('Firebase init failed:', e);
+    return false;
+  }
+}
+
+// Subscribe to a tournament's match-results node. Detaches any previous
+// subscription first so the hub can switch tournaments without reloading.
+// resultsPath may be a top-level node (legacy: "results", "tournament2", …)
+// or a nested path under the registry (dynamic: "tournaments/t5/results").
+function subscribeResults(resultsPath) {
+  if (!database) return false;
+  // Already listening to this exact node — keep it. This matters because the
+  // dynamic hub also watches the parent "tournaments" node, and a saved result
+  // (nested under it) re-fires that listener; without this guard we would tear
+  // down and re-attach the results listener on every save.
+  if (currentResultsPath === resultsPath && resultsRef) return true;
+  if (resultsRef) resultsRef.off();
+  currentResultsPath = resultsPath;
+  results = {};
+  resultsRef = database.ref(resultsPath);
+  resultsRef.on('value', (snapshot) => {
+    results = snapshot.val() || {};
+    render();
+    checkTournamentComplete();
+  }, (err) => {
+    // e.g. permission denied because the results node has no matching rule.
+    console.error('Failed to read results for "' + resultsPath + '":', err);
+    if (typeof showToast === 'function') {
+      showToast('⚠ Cannot load "' + resultsPath + '" — check Firebase rules');
+    }
+  });
+  return true;
 }
 
 function autoSave() {
@@ -44,6 +65,47 @@ function autoSave() {
   } else {
     localStorage.setItem(`polytournament-results-${TOURNAMENT_ID}`, JSON.stringify(results));
   }
+}
+
+// ─── SCORE DOCS (feed the WhatsApp announcement Cloud Function) ──────────────
+// Alongside the positional `results` map (used for ranking), we write a richer
+// per-match "score doc" under tournaments/<id>/scores/<matchId>. It carries an
+// explicit winner_nickname and a `notified` flag. An n8n schedule polls these
+// docs, reads winner_nickname (never recomputes it), announces to WhatsApp, and
+// sets notified:true. Writing notified:false on every save lets a correction
+// re-announce. Scores are Firebase-only (no localStorage fallback — no bot offline).
+function scoresBasePath() {
+  if (!currentResultsPath) return null;
+  return currentResultsPath.replace(/\/results$/, '');
+}
+
+function saveScore(r, c, winner) {
+  if (!database) return;
+  const base = scoresBasePath();
+  if (!base) return;
+  const a = Math.min(r, c), b = Math.max(r, c);
+  const matchId = `${a}-${b}`;
+  const winnerIdx = winner === 'r' ? r : c;
+  const loserIdx = winner === 'r' ? c : r;
+  const score = {
+    result: winnerIdx === a ? '1:0' : '0:1',   // canonical: row(a) vs col(b)
+    winner_nickname: PLAYERS[winnerIdx].name,
+    loser_nickname: PLAYERS[loserIdx].name,
+    row_nickname: PLAYERS[a].name,
+    col_nickname: PLAYERS[b].name,
+    match_id: matchId,
+    notified: false,
+    created_at: Date.now(),
+  };
+  database.ref(`${base}/scores/${matchId}`).set(score).catch(e => console.error('Score save failed:', e));
+}
+
+function deleteScore(r, c) {
+  if (!database) return;
+  const base = scoresBasePath();
+  if (!base) return;
+  const a = Math.min(r, c), b = Math.max(r, c);
+  database.ref(`${base}/scores/${a}-${b}`).remove().catch(e => console.error('Score delete failed:', e));
 }
 
 function loadFromStorage() {
@@ -81,14 +143,24 @@ function clearResultAt(r, c) {
   else delete results[key(c, r)];
 }
 
+function initialsAvatar(idx, size) {
+  const p = PLAYERS[idx];
+  const initials = (p.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const colors = ['#3a5a8a', '#5a3a8a', '#8a5a3a', '#3a8a5a', '#8a3a5a', '#5a8a3a', '#3a6a7a'];
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${colors[idx % colors.length]};display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:${Math.round(size * 0.35)}px;color:#fff;border:2px solid var(--border);flex-shrink:0;">${initials}</div>`;
+}
+
+// If a derived avatar image is missing, swap it for the initials placeholder.
+function onAvatarError(img, idx, size) {
+  img.outerHTML = initialsAvatar(idx, size);
+}
+
 function avatarEl(idx, size) {
   const p = PLAYERS[idx];
   if (p.avatar) {
-    return `<img src="${p.avatar}" width="${size}" height="${size}" style="border-radius:50%;border:2px solid var(--border);object-fit:cover;" alt="${p.name}">`;
+    return `<img src="${p.avatar}" width="${size}" height="${size}" style="border-radius:50%;border:2px solid var(--border);object-fit:cover;" alt="${p.name}" onerror="onAvatarError(this, ${idx}, ${size})">`;
   }
-  const initials = p.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const colors = ['#3a5a8a', '#5a3a8a', '#8a5a3a', '#3a8a5a', '#8a3a5a', '#5a8a3a', '#3a6a7a'];
-  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${colors[idx % colors.length]};display:flex;align-items:center;justify-content:center;font-family:'Cinzel',serif;font-size:${Math.round(size * 0.35)}px;color:#fff;border:2px solid var(--border);flex-shrink:0;">${initials}</div>`;
+  return initialsAvatar(idx, size);
 }
 
 // ─── STATS AND RANKING ─────────────────────────────────────────────────────
@@ -174,7 +246,6 @@ function sortByRank(stats) {
 function render() {
   renderMatrix();
   renderScoreboard();
-  renderRankings();
   renderProgress();
 }
 
@@ -236,40 +307,12 @@ function renderScoreboard() {
   document.getElementById('scoreboard').innerHTML = html;
 }
 
-function renderRankings() {
-  const stats = sortByRank(calcStats());
-  let html = '';
-  let displayRank = 1;
-  let tieGroupStart = null;
-
-  stats.forEach((s, idx) => {
-    if (idx > 0 && s.pts === stats[idx - 1].pts && s.isTied && stats[idx - 1].isTied) {
-      if (tieGroupStart === null) tieGroupStart = displayRank;
-    } else {
-      tieGroupStart = null;
-      displayRank = idx + 1;
-    }
-
-    const rankDisplay = tieGroupStart !== null ? `T${tieGroupStart}` : `${displayRank}`;
-    const tieIcon = s.isTied && idx === 0 ? ' 🤝' : '';
-
-    html += `<tr>
-      <td class="rank-no">${rankDisplay}.</td>
-      <td><div class="rank-name">${avatarEl(s.idx, 42)} ${PLAYERS[s.idx].name}${tieIcon}</div></td>
-      <td class="pts">${s.pts}</td>
-      <td class="wins">${s.wins}</td>
-      <td class="losses">${s.losses}</td>
-      <td style="color:var(--muted)">${s.remaining}</td>
-    </tr>`;
-  });
-  document.getElementById('rank-body').innerHTML = html;
-}
-
 function renderProgress() {
   let played = 0;
   for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) if (results[key(i, j)]) played++;
   document.getElementById('progress-text').textContent = `${played} / ${TOTAL}`;
-  document.getElementById('progress-fill').style.width = `${(played / TOTAL * 100).toFixed(1)}%`;
+  const pct = TOTAL > 0 ? (played / TOTAL * 100) : 0;
+  document.getElementById('progress-fill').style.width = `${pct.toFixed(1)}%`;
 }
 
 // ─── POPUP FUNCTIONS ───────────────────────────────────────────────────────
@@ -329,6 +372,7 @@ function confirmResult(winner) {
   const result = winner === 'r' ? '1:0' : '0:1';
   setResult(activeCell.r, activeCell.c, result);
   autoSave();
+  saveScore(activeCell.r, activeCell.c, winner);
   closePopup();
   render();
   showToast(result === '1:0'
@@ -342,6 +386,7 @@ function clearResult() {
   if (!activeCell) return;
   clearResultAt(activeCell.r, activeCell.c);
   autoSave();
+  deleteScore(activeCell.r, activeCell.c);
   closePopup();
   render();
   showToast('Result deleted');
@@ -432,14 +477,22 @@ function showToast(msg) {
 }
 
 // ─── EVENT LISTENERS ───────────────────────────────────────────────────────
-document.getElementById('popup').addEventListener('click', e => {
-  if (e.target === document.getElementById('popup')) closePopup();
-});
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('popup').classList.contains('active')) {
-    closePopup();
+// Attached after the shared templates are injected (the popup element must
+// already exist in the DOM), so this is called from injectSharedTemplates().
+function attachGlobalListeners() {
+  const popup = document.getElementById('popup');
+  if (popup) {
+    popup.addEventListener('click', e => {
+      if (e.target === popup) closePopup();
+    });
   }
-});
+  document.addEventListener('keydown', e => {
+    const p = document.getElementById('popup');
+    if (e.key === 'Escape' && p && p.classList.contains('active')) {
+      closePopup();
+    }
+  });
+}
 
 // ─── TEMPLATE INJECTION ────────────────────────────────────────────────────
 function injectSharedTemplates() {
@@ -480,6 +533,9 @@ function injectSharedTemplates() {
 
   document.body.insertAdjacentHTML('beforeend', template);
 
+  // Wire up listeners now that the popup/celebration elements exist.
+  attachGlobalListeners();
+
   // Add click-to-close for celebration overlay
   setTimeout(() => {
     const celebrationOverlay = document.getElementById('celebration');
@@ -490,24 +546,194 @@ function injectSharedTemplates() {
 }
 
 // ─── INITIALIZATION ────────────────────────────────────────────────────────
-function initTournament(players, tournamentId, firebaseConfig) {
-  // Inject shared UI templates
+// Normalize a roster into the internal { name, avatar } shape.
+// Dynamic tournaments store players as a simple list of nicknames (strings);
+// the avatar path is a repo convention derived from the nickname. Legacy pages
+// pass { name, avatar } objects, which are kept as-is.
+function normalizePlayers(players) {
+  return (players || []).map(p => {
+    if (typeof p === 'string') {
+      return { name: p, avatar: 'resources/img/' + p + '.jpeg' };
+    }
+    if (p && typeof p === 'object') {
+      return { name: p.name, avatar: p.avatar || (p.name ? 'resources/img/' + p.name + '.jpeg' : '') };
+    }
+    return { name: String(p), avatar: '' };
+  });
+}
+
+// Set the active roster and derive the round-robin totals.
+function setPlayers(players) {
+  window.PLAYERS = normalizePlayers(players);
+  N = window.PLAYERS.length;
+  TOTAL = (N * (N - 1)) / 2;
+}
+
+// ─── DYNAMIC HUB (Tournament 2.0) ──────────────────────────────────────────
+
+// Registry caching: keep the last good registry in localStorage so the hub can
+// still render tournaments if a later Firebase read fails (offline / rules).
+const REGISTRY_CACHE_KEY = 'polytournament-registry';
+function cacheRegistry(reg) {
+  try { localStorage.setItem(REGISTRY_CACHE_KEY, JSON.stringify(reg)); } catch (e) { /* storage unavailable */ }
+}
+function loadCachedRegistry() {
+  try {
+    const s = localStorage.getItem(REGISTRY_CACHE_KEY);
+    return s ? JSON.parse(s) : null;
+  } catch (e) { return null; }
+}
+
+// Build the "Style: Glory 15k · Map: … · Bots: 14 Crazy" subtitle from a
+// structured setup object stored in Firebase.
+function buildSubtitle(setup, override) {
+  // An explicit subtitle string wins — used to preserve the exact wording of
+  // tournaments whose descriptor doesn't fit the structured setup schema
+  // (e.g. the early 1v1 PvP tournaments).
+  if (override) return override;
+  if (!setup) return '';
+  const parts = [];
+  if (setup.style) {
+    const style = String(setup.style).toLowerCase() === 'glory'
+      ? 'Glory' + (setup.gloryTier ? ' ' + setup.gloryTier : '')
+      : 'Might';
+    parts.push('Style: ' + style);
+  }
+  if (setup.mapType) parts.push('Map: ' + setup.mapType);
+  if (setup.mapSize) parts.push('Size: ' + setup.mapSize);
+  if (setup.nation) parts.push('Nation: ' + setup.nation);
+  if (setup.botCount != null && setup.botCount !== '') {
+    parts.push('Bots: ' + setup.botCount + (setup.botDifficulty ? ' ' + setup.botDifficulty : ''));
+  }
+  return parts.join(' · ');
+}
+
+// Registry (Firebase `tournaments` node) → sorted array of {id, ...entry}.
+function registryToList(registry) {
+  return Object.entries(registry || {})
+    .map(([id, t]) => Object.assign({ id }, t))
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+// The tournament id currently selected via the URL hash (#t=<id>).
+function currentHashTid() {
+  const m = (location.hash || '').match(/[#&]t=([^&]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// Resolve which dynamic tournament to show: the hash selection if valid, then
+// the `latest_tournament` pointer if valid, otherwise the newest (highest-order)
+// dynamic tournament. The pointer read may fail (rules) — the fallback covers it.
+function resolveActiveTid(list) {
+  const dynamic = list.filter(t => !t.legacy);
+  const hashed = currentHashTid();
+  if (hashed && dynamic.some(t => t.id === hashed)) return hashed;
+  const latest = window.LATEST_TID;
+  if (latest && dynamic.some(t => t.id === latest)) return latest;
+  return dynamic.length ? dynamic[dynamic.length - 1].id : null;
+}
+
+function buildHubNav(list, activeTid) {
+  const nav = document.getElementById('tournament-nav');
+  if (!nav) return;
+  nav.innerHTML = list.map(t => {
+    const title = t.title || t.id;
+    if (t.legacy) {
+      return `<a href="${t.href}">${title}</a>`;
+    }
+    const active = t.id === activeTid ? ' class="active"' : '';
+    return `<a href="#t=${encodeURIComponent(t.id)}"${active}>${title}</a>`;
+  }).join('');
+}
+
+function setHubState(hasTournament, message) {
+  const board = document.getElementById('hub-board');
+  const empty = document.getElementById('hub-empty');
+  if (board) board.style.display = hasTournament ? '' : 'none';
+  if (empty) {
+    empty.style.display = hasTournament ? 'none' : '';
+    if (message) empty.textContent = message;
+  }
+}
+
+function loadDynamicTournament(entry) {
+  // Reset any lingering celebration from a previously viewed tournament.
+  const celebration = document.getElementById('celebration');
+  if (celebration) celebration.classList.remove('active');
+
+  const title = entry.title || entry.id;
+  document.title = title + ' · Polytopia Tournament';
+  const h1 = document.getElementById('hub-title');
+  const sub = document.getElementById('hub-subtitle');
+  if (h1) h1.textContent = title;
+  if (sub) sub.textContent = buildSubtitle(entry.setup, entry.subtitle);
+
+  // `players` is the single source of truth for who is in the tournament: a plain
+  // list of nickname strings. The WhatsApp bot appends to it on sign-in, and it
+  // can be edited by hand in Firebase. The board renders exactly this list.
+  setPlayers(entry.players || []);
+  // Match results live INSIDE the registry entry, so creating a tournament is
+  // just adding a child under "tournaments" — no separate node or rule per
+  // tournament. (Legacy pages still use their own top-level nodes.)
+  const resultsPath = 'tournaments/' + entry.id + '/results';
+  window.TOURNAMENT_ID = resultsPath;
+
+  setHubState(true);
+  if (!subscribeResults(resultsPath)) {
+    // No Firebase → fall back to local storage for this tournament.
+    loadFromStorage();
+    render();
+    checkTournamentComplete();
+  }
+}
+
+// Entry point for the dynamic hub (new index.html).
+function initHub(firebaseConfig) {
   injectSharedTemplates();
 
-  // Set globals
-  window.PLAYERS = players;
-  window.TOURNAMENT_ID = tournamentId;
-  N = players.length;
-  TOTAL = (N * (N - 1)) / 2;
-
-  // Try Firebase first, fallback to localStorage
-  const firebaseConnected = initFirebase(firebaseConfig, tournamentId);
-
-  if (!firebaseConnected) {
-    loadFromStorage();
+  if (!ensureFirebaseApp(firebaseConfig)) {
+    setHubState(false, 'Firebase is unavailable, so tournaments cannot be loaded.');
+    return;
   }
 
-  // Initial render
-  render();
-  checkTournamentComplete();
+  const route = () => {
+    const registry = window.REGISTRY || {};
+    const list = registryToList(registry);
+    const activeTid = resolveActiveTid(list);
+    buildHubNav(list, activeTid);
+    if (!activeTid) {
+      setHubState(false, 'No dynamic tournaments yet. Add one to the "tournaments" node in Firebase.');
+      return;
+    }
+    loadDynamicTournament(list.find(t => t.id === activeTid));
+  };
+
+  database.ref('tournaments').on('value', (snapshot) => {
+    window.REGISTRY = snapshot.val() || {};
+    cacheRegistry(window.REGISTRY);
+    route();
+  }, (err) => {
+    console.error('Failed to read tournaments registry:', err);
+    // Explicit fallback: serve the last successfully-loaded registry if we have
+    // one cached, otherwise show the guidance message.
+    const cached = loadCachedRegistry();
+    if (cached) {
+      window.REGISTRY = cached;
+      route();
+      if (typeof showToast === 'function') showToast('⚠ Offline — showing cached tournaments');
+    } else {
+      setHubState(false, 'Could not read the tournament list (check Firebase rules for the "tournaments" node).');
+    }
+  });
+
+  // The latest_tournament pointer is a nicety for choosing the default view.
+  // It lives at the top level and may be unreadable under strict rules — if so,
+  // we simply fall back to newest-by-order (see resolveActiveTid).
+  database.ref('latest_tournament').on('value', (snap) => {
+    const v = snap.val();
+    window.LATEST_TID = (typeof v === 'string') ? v : null;
+    route();
+  }, () => { /* ignore: pointer is optional */ });
+
+  window.addEventListener('hashchange', route);
 }

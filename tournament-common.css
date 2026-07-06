@@ -124,6 +124,18 @@ h1 {
   display: inline-block;
   letter-spacing: 0.05em;
 }
+.hub-empty {
+  margin: 4rem auto;
+  max-width: 640px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 1.15rem;
+  line-height: 1.6;
+  padding: 2rem 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
 
 /* Scoreboard */
 .scoreboard {
