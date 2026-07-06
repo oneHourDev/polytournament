@@ -196,6 +196,7 @@ The web app writes each result to `tournaments/<tid>/scores/<matchId>` with
 re-announces next tick. Tune the interval on the **Every minute** node.
 
 ## Keep logic in sync
+//test
 
 The Code nodes mirror **`lib/bot-logic.js`**, which is unit-tested (`npm test`) —
 the classifier (`normalizeIntent` / `classifyIntent` / `intentCatalog`), sign-in
